@@ -1,4 +1,4 @@
-# FotoStudioH (`fsh-agent`)
+# video-edit-cc (`fsh-agent`)
 
 A fully autonomous, local-IT video editing agent.
 
@@ -109,7 +109,7 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 
 ```bash
 cd docker
-docker compose build fotostudioh-agent
+docker compose build video-edit-cc-agent
 ```
 
 First build takes ~15-30 min on Linux, ~30-45 min on macOS (Docker
@@ -121,7 +121,7 @@ download into `/opt/whisper-models/`).
 ### 4. Bring it up
 
 ```bash
-docker compose up -d fotostudioh-agent
+docker compose up -d video-edit-cc-agent
 ```
 
 The container runs `tail -f /dev/null` as a long-running entrypoint;
@@ -131,11 +131,11 @@ the agent itself is launched on demand via the alias below.
 
 ```bash
 # Linux (bash):
-echo 'alias fsh-agent='"'"'docker exec -it fotostudioh-agent bash -c "cd /work && claude"'"'"'' >> ~/.bashrc
+echo 'alias fsh-agent='"'"'docker exec -it video-edit-cc-agent bash -c "cd /work && claude"'"'"'' >> ~/.bashrc
 source ~/.bashrc
 
 # macOS (zsh):
-echo 'alias fsh-agent='"'"'docker exec -it fotostudioh-agent bash -c "cd /work && claude"'"'"'' >> ~/.zshrc
+echo 'alias fsh-agent='"'"'docker exec -it video-edit-cc-agent bash -c "cd /work && claude"'"'"'' >> ~/.zshrc
 source ~/.zshrc
 ```
 

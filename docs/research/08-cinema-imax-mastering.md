@@ -139,6 +139,6 @@ But EBU has built an open NGA chain that mimics Atmos's object model:
 
 ## Bottom line
 
-For IMAX work: FotoStudioH should deliver a **clean OSS-mastered stereo + 5.1 PCM submaster + isolated stems** to a commercial mastering house that handles Atmos/DTS:X encode. The OSS chain produces excellent **pre-masters**, never final theatrical encodes.
+For IMAX work: video-edit-cc should deliver a **clean OSS-mastered stereo + 5.1 PCM submaster + isolated stems** to a commercial mastering house that handles Atmos/DTS:X encode. The OSS chain produces excellent **pre-masters**, never final theatrical encodes.
 
 Promising "IMAX-grade" with OSS-only is a misrepresentation. Promising "IMAX-submission-ready 5.1 PCM with Netflix-spec loudness" is honest and achievable.

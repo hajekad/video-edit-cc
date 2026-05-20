@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook — continuous-worker loop for the FotoStudioH video pipeline.
+# Stop hook — continuous-worker loop for the video-edit-cc video pipeline.
 # Adapted from nix-zeneca-model's matrix/work-item loop. Replaces the
 # `make audit/test-full/conformance` gates with video-pipeline stage
 # detection driven by manifest.json + on-disk artifacts.

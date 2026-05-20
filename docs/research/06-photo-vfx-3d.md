@@ -1,7 +1,7 @@
 # Research: photo / image / VFX / 3D skill repos
 
 Background research output from a parallel agent. The PHOTO side of
-FotoStudioH (the "Foto" in the name) — local AI photo editing, photo
+video-edit-cc (the "Foto" in the name) — local AI photo editing, photo
 composition, 3D/Blender automation, VFX, and image↔video bridges.
 
 ## Top 5 must-clones (priority order)
@@ -75,7 +75,7 @@ scoring models (idealo/image-quality-assessment) are CNN scorers,
 not LLM craft instruction.
 
 **Recommendation: hand-author `photo-composition/SKILL.md`** — a
-FotoStudioH-native moat using standard photography references. The
+video-edit-cc-native moat using standard photography references. The
 gap is real and the work is well-bounded.
 
 ## VFX — slim pickings

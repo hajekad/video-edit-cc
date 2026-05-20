@@ -1,4 +1,4 @@
-# FotoStudioH — Foundational Prompt
+# video-edit-cc — Foundational Prompt
 
 This is the brief that anchors every session. Re-read it when starting a
 new project, when a stage gate fails, or when the user's intent feels
@@ -7,7 +7,7 @@ ISSUE_TRACKING, SKILL_ROUTING.
 
 ## What we are
 
-FotoStudioH (fsh-agent) is a **fully autonomous, fully local-IT video
+video-edit-cc (fsh-agent) is a **fully autonomous, fully local-IT video
 editing agent**. A user — typically a director, not a programmer —
 drops video files in `/assets/<project>/raw/` (plus an optional
 `prompt.txt`). The agent runs a continuous-worker loop that drives the

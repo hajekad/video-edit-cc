@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fsh-context — FotoStudioH project/issue/capability lookup CLI.
+"""fsh-context — video-edit-cc project/issue/capability lookup CLI.
 
 Equivalent of nix-zeneca's `nixfactor-context` Rust MCP, kept lighter
 as a plain Python CLI so the agent invokes it via Bash. No MCP server

@@ -1,11 +1,11 @@
-# FotoStudioH — Agent Architecture
+# video-edit-cc — Agent Architecture
 
 A continuous-worker video-editing agent. User drops inputs into `/assets/<project>/`, the agent runs an autonomous pipeline to produce `final.mp4` (and optional NLE XML) in `/assets/<project>/output/`. Internal state lives in `/work/<project>/`.
 
 ## Top-level layout (host)
 
 ```
-~/FotoStudioH/
+~/video-edit-cc/
 ├── assets/                      # USER IO. Inputs + outputs. Orientation surface.
 │   └── <project-name>/
 │       ├── raw/                 # files dropped by user (folder/zip/single)
@@ -48,9 +48,9 @@ A continuous-worker video-editing agent. User drops inputs into `/assets/<projec
 ## Inside the container
 
 ```
-/assets   ← bind-mount from ~/FotoStudioH/assets
-/work     ← bind-mount from ~/FotoStudioH/work
-/agents   ← bind-mount from ~/FotoStudioH/agents
+/assets   ← bind-mount from ~/video-edit-cc/assets
+/work     ← bind-mount from ~/video-edit-cc/work
+/agents   ← bind-mount from ~/video-edit-cc/agents
 /root/.claude  ← named volume `claude-config` (auth, sessions, settings)
 /root/.cache   ← named volume `hf-models` (WhisperX, HF, Torch caches)
 /opt/claude-config  ← baked into image; seed.sh upserts into /root/.claude on start

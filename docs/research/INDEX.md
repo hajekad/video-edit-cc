@@ -1,6 +1,6 @@
 # Research Index
 
-Output from parallel research agents on the FotoStudioH skill / context
+Output from parallel research agents on the video-edit-cc skill / context
 landscape. Read when the project demands a capability not yet in
 `/docs/CAPABILITY_MATRIX.md` — these reports show what's available
 externally and what we'd have to hand-author.
@@ -14,7 +14,7 @@ externally and what we'd have to hand-author.
 | 03 | [domain-patterns.md](./03-domain-patterns.md) | Per-domain video editing patterns (wedding, doc, tutorial, music video, sports, real-estate, vlog, kids, corporate, news). Single best source: OpenMontage `pipelines/documentary-montage/edit-director.md` (AGPL — paraphrase, don't fork). Honest gaps: wedding/sports/real-estate/kids/news — hand-author. |
 | 04 | [harsh-reviewer.md](./04-harsh-reviewer.md) | How to make the `issue-state-review.sh` reviewer actually push back instead of rubber-stamping. 24-item rubric, 9 bias-mitigation techniques, recommended prompt diff. |
 | 05 | [compliance-accessibility.md](./05-compliance-accessibility.md) | Copyright (chromaprint+AcoustID), privacy/face-blur (EgoBlur), accessibility (Microsoft AD, daltonize, OpenDyslexic), localization (VideoLingo, Linly-Dubbing), brand-safety (nsfw_model + open_clip). |
-| 06 | [photo-vfx-3d.md](./06-photo-vfx-3d.md) | Photo (the "Foto" side of FotoStudioH): local AI photo editing, 3D/Blender automation, VFX, image↔video bridges. Top: ahujasid/blender-mcp (21.8K★), danielrosehill/Claude-Image-Production-Plugin, RobLe3/cc-blender-skill, LingyiChen-AI/comfyui-workflow-skill, BrokenSource/DepthFlow. |
+| 06 | [photo-vfx-3d.md](./06-photo-vfx-3d.md) | Photo (the "Foto" side of video-edit-cc): local AI photo editing, 3D/Blender automation, VFX, image↔video bridges. Top: ahujasid/blender-mcp (21.8K★), danielrosehill/Claude-Image-Production-Plugin, RobLe3/cc-blender-skill, LingyiChen-AI/comfyui-workflow-skill, BrokenSource/DepthFlow. |
 | 07 | [music-workflow.md](./07-music-workflow.md) | Music: sourcing (royalty-free aggregator gap), beat-sync (allin1 + beat_this), audiophile mastering (matchering + master_me + pyloudnorm), demographic→music bridge (Essentia + LAION-CLAP). Trending: TikTok Creative Center HTML scrape is the only honest free source. |
 | 08 | [cinema-imax-mastering.md](./08-cinema-imax-mastering.md) | Theatrical / IMAX deep-dive. **Honest cap**: OSS delivers DCI-compliant PCM submasters + R128-conformant mixes; **no OSS path to Dolby Atmos / DTS:X bitstream**. Top: ZFTurbo/MSST, lsp-plugins, ebu/ebu_adm_renderer. Hand off Atmos encode to commercial mastering house. |
 | 09 | [music-editorial-judgment.md](./09-music-editorial-judgment.md) | When/what/why of music in editing. **No OSS skill repo exists** — niche is unencoded. 12 must-read prose sources (Murch, Pearlman, Musco, Cohen CAM, Lehigh ironic-music). Q3 mood-to-music table + Q6 editor-overrides-marketing are hand-author gaps. |

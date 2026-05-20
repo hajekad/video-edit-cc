@@ -139,7 +139,7 @@ hits a new quirk documents it so the next agent doesn't re-discover.
 
 Edit `/opt/claude-config/delivery-presets.json` if the running
 container needs to see it immediately. ALSO copy your edit to
-`/home/adam/FotoStudioH/docker/claude-config/delivery-presets.json` on
+`/home/adam/video-edit-cc/docker/claude-config/delivery-presets.json` on
 the host via the docker socket so it survives rebuild — OR just edit
 the host file via `docker exec` writing back through any host-visible
 bind mount you can reach.

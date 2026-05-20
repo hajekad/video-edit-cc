@@ -105,7 +105,7 @@ marketing_persona → {genre_set, BPM_range, energy, valence, era, vocal_pref}
   trend_source: none
 ```
 
-## Recommended mastering chain for FotoStudioH (OSS, local)
+## Recommended mastering chain for video-edit-cc (OSS, local)
 
 ```
 [input video audio]

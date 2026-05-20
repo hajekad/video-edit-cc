@@ -79,7 +79,7 @@ fi
 mkdir -p "$MARKER_DIR" 2>/dev/null || true
 
 REVIEWER_PROMPT=$(cat <<'PROMPT_EOF'
-You are an INDEPENDENT reviewer for the FotoStudioH video-editing project.
+You are an INDEPENDENT reviewer for the video-edit-cc video-editing project.
 
 CRITICAL FRAMING. The change you are reviewing was produced by a separate
 AI agent — NOT by you. Treat it as third-party work that must earn the

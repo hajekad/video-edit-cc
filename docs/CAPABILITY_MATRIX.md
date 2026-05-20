@@ -7,7 +7,7 @@ wires what's missing per `/docs/HARNESS_SELF_EXTENSION.md` §
 "Promise, then wire". A row at `engine-not-wired` is a task list
 entry, not a "can't do."
 
-Tracks every capability the FotoStudioH agent supports, the on-disk
+Tracks every capability the video-edit-cc agent supports, the on-disk
 evidence required to consider it "production-ready", and which skill
 repo backs it.
 

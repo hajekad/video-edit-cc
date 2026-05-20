@@ -55,7 +55,7 @@ vocabulary layer because nobody else packaged it cleanly.
 
 ## License caveat — OpenMontage AGPL-3.0
 
-Borrowing prose verbatim from OpenMontage into FotoStudioH triggers
+Borrowing prose verbatim from OpenMontage into video-edit-cc triggers
 copyleft obligations. The safer path is **paraphrase under attribution**
 into our own `/agents/fsh-<domain>/SKILL.md` files — that way the prose
 becomes original work derived from public ideas, and we keep our own

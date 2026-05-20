@@ -1,4 +1,4 @@
-# Build context is the FotoStudioH root (see docker-compose.yml: context: ..).
+# Build context is the video-edit-cc root (see docker-compose.yml: context: ..).
 # The Dockerfile only COPIES:
 #   - agents/system-packages.txt    (pacman/AUR manifest, read at build time)
 #   - agents/python-packages.txt    (pip manifest for /opt/ml-venv, read at build time)

@@ -5,7 +5,7 @@ argument-hint: <project-name> [optional-prompt]
 
 # /edit — full pipeline driver
 
-Run the complete FotoStudioH pipeline on the project at `/assets/$1/`.
+Run the complete video-edit-cc pipeline on the project at `/assets/$1/`.
 Nested asset IDs are OK (e.g. `Q2-2026/PyrolyzaKveten`); the scaffold
 slugs them to a flat `/work/<slug>/`.
 

@@ -157,6 +157,72 @@ def check_brand_logo(manifest: dict) -> dict:
     }
 
 
+def check_delivery_zip(asset_out: Path, slug: str, expected_cut_count: int) -> list[dict]:
+    """Per docs/stages/delivered.md § 4b: every project ships a
+    <slug>_delivery.zip with per-cut folders + publish_instructions.txt.
+    Smoke #3 had the agent write build_delivery_zip.py and never run it.
+    This check ensures the canonical deliverable is actually produced."""
+    import zipfile as _zip
+
+    results = []
+    zip_path = asset_out / f"{slug}_delivery.zip"
+    if not zip_path.exists():
+        return [{
+            "check": "delivery:zip_present",
+            "passed": False,
+            "detail": f"missing {zip_path} — per docs/stages/delivered.md § 4b "
+                      f"every project ships a <slug>_delivery.zip. "
+                      f"Run /work/{slug}/edit/build_delivery_zip.py if it exists, "
+                      f"otherwise author one per the spec.",
+        }]
+    results.append({
+        "check": "delivery:zip_present",
+        "passed": True,
+        "detail": f"{zip_path} ({zip_path.stat().st_size // 1024} KB)",
+    })
+
+    # Open + verify structure
+    try:
+        with _zip.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+    except Exception as e:
+        return results + [{
+            "check": "delivery:zip_readable",
+            "passed": False,
+            "detail": f"cannot open zip: {e}",
+        }]
+
+    # Each cut should have its own folder + publish_instructions.txt
+    cut_folders = set()
+    publish_instructions = []
+    for n in names:
+        if "/" in n:
+            cut_folders.add(n.split("/", 1)[0])
+        if n.endswith("publish_instructions.txt"):
+            publish_instructions.append(n)
+
+    # When n=1, the folder is "final/"; when n>1, "cut1/", "cut2/", ...
+    expected_folders = (
+        {"final"} if expected_cut_count <= 1
+        else {f"cut{i}" for i in range(1, expected_cut_count + 1)}
+    )
+    missing = expected_folders - cut_folders
+    results.append({
+        "check": "delivery:zip_per_cut_folders",
+        "passed": not missing,
+        "detail": (f"missing folders in zip: {sorted(missing)}" if missing
+                   else f"all {len(expected_folders)} per-cut folders present"),
+    })
+
+    results.append({
+        "check": "delivery:zip_publish_instructions",
+        "passed": len(publish_instructions) >= len(expected_folders),
+        "detail": (f"{len(publish_instructions)} publish_instructions.txt vs "
+                   f"{len(expected_folders)} folders"),
+    })
+    return results
+
+
 def check_no_documented_gaps(asset_out: Path) -> list[dict]:
     """Self-documented 'Known gaps' in README signal an incomplete delivery.
     Smoke #3 shipped with 'Logo dropin (pending)' + 'typographic ORLEN wordmark
@@ -287,6 +353,11 @@ def main() -> int:
     checks.append(check_brand_logo(manifest))
     for v in variants:
         checks += check_variant(work_dir, asset_out, args.slug, v, preset, music_mode)
+    # Cut count for multi-cut projects: derived from edit/cuts/*.json or
+    # falls back to 1 (single-final project).
+    cuts_dir = work_dir / "edit" / "cuts"
+    cut_count = len(list(cuts_dir.glob("*.json"))) if cuts_dir.is_dir() else 1
+    checks += check_delivery_zip(asset_out, args.slug, cut_count)
     checks += check_no_documented_gaps(asset_out)
 
     failed = [c for c in checks if not c["passed"]]

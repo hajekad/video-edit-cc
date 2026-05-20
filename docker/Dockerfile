@@ -50,9 +50,10 @@ RUN pacman -Syu --noconfirm && \
 # ---------------------------------------------------------------------------
 RUN useradd -m -G wheel -s /bin/bash builder && \
     echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder && \
-    su builder -c 'cd /tmp && \
+    ( su builder -c 'cd /tmp && \
         git clone https://aur.archlinux.org/paru.git && \
-        cd paru && makepkg -si --noconfirm' && \
+        cd paru && makepkg -si --noconfirm' \
+      || echo "WARN: paru AUR build failed (likely Rosetta 2 emulation hitting fakeroot/LD_PRELOAD limits). agent-install will fail at runtime until paru is rebuilt; if you don't need AUR packages (system-packages.txt empty or repo-only), the image is still usable." ) && \
     rm -rf /tmp/paru /home/builder/.cargo /home/builder/.cache
 
 # ---------------------------------------------------------------------------
@@ -149,8 +150,9 @@ RUN pkgs=$(grep -vE '^\s*(#|$)' /tmp/python-packages.txt | tr '\n' ' ') && \
 ENV FSH_WHISPER_MODEL_DIR=/opt/whisper-models \
     FSH_WHISPER_MODEL_NAME=large-v3
 RUN mkdir -p "$FSH_WHISPER_MODEL_DIR" && \
-    /opt/ml-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('$FSH_WHISPER_MODEL_NAME', download_root='$FSH_WHISPER_MODEL_DIR', compute_type='int8')" && \
-    ls -lh "$FSH_WHISPER_MODEL_DIR"
+    ( /opt/ml-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('$FSH_WHISPER_MODEL_NAME', download_root='$FSH_WHISPER_MODEL_DIR', compute_type='int8')" \
+      && ls -lh "$FSH_WHISPER_MODEL_DIR" \
+      || echo "WARN: WhisperX pre-warm failed (likely Rosetta 2 emulation, network, or HF rate-limit). The model downloads lazily on first transcribe at runtime, so this isn't fatal — just makes the first project a few minutes slower." )
 
 # ---------------------------------------------------------------------------
 # agent-install: canonical install path inside the container. Installs the

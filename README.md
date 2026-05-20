@@ -40,17 +40,16 @@ brief, agent-only, no manual editorial intervention.
 
 | Component | Required | Why |
 |---|---|---|
-| OS | **Linux** (tested: Fedora-based) | NVIDIA Container Toolkit + CDI passthrough is Linux-only |
-| GPU | **NVIDIA, 12 GB+ VRAM** (tested: RTX 3080 Ti) | WhisperX large-v3 + ffmpeg NVENC + future image-gen / TTS |
-| Driver | NVIDIA driver ≥ 535 | CUDA 12.1 wheels |
-| Docker | Docker Engine 24+ with `compose` plugin v2.20+ | container build + GPU passthrough via CDI |
-| NVIDIA Container Toolkit | installed + `nvidia-ctk runtime configure` done | GPU inside container |
+| OS | Linux or macOS | Container build + run works on both |
+| Docker | Docker Engine 24+ (Linux) OR Docker Desktop 4.30+ (macOS) with `compose` plugin v2.20+ | Container build + run |
+| GPU | NVIDIA 12 GB+ VRAM **for fast runs**; CPU-only works **slower** | WhisperX large-v3 + ffmpeg NVENC for fast turnaround; CPU fallback is functional but slow |
+| If NVIDIA: driver ≥ 535 + NVIDIA Container Toolkit | `nvidia-ctk runtime configure --runtime=docker` | GPU passthrough into the container |
 | Disk | ~20 GB for image + ~10 GB+ per active project | Image bakes WhisperX large-v3 weights (~3 GB), CUDA wheels (~6 GB) |
 | Network | Public internet on first build | Pacman + pip + HuggingFace model fetch |
 
-**macOS support:** the agent does NOT run natively on macOS — no CUDA,
-no NVENC, no Linux-only ML wheels. See [Working from macOS](#working-from-macos)
-below for the practical path (SSH / VS Code remote into a Linux host).
+**Tested host:** Linux (Fedora-based) + RTX 3080 Ti — full-speed path,
+all GPU acceleration live. macOS path works (see below) but renders
+take longer.
 
 ---
 
@@ -142,63 +141,76 @@ count + GPU.
 
 ---
 
-## Working from macOS
+## Running on macOS
 
-The agent doesn't run natively on macOS — no CUDA, no NVENC, no Linux-only
-ML wheels. Three practical paths:
+The container builds + runs on macOS via Docker Desktop's Linux VM.
+Everything functional, just slower without an NVIDIA GPU. Two
+adjustments to the standard setup:
 
-### Recommended: VS Code Remote over SSH to a Linux GPU host
+### 1. Comment out the GPU passthrough block
 
-You operate from your Mac; the agent runs on a Linux+NVIDIA box you have
-SSH access to (workstation, dedicated build box, friend's machine).
+`docker/docker-compose.yml` has an NVIDIA reservation that errors on
+hosts without a CUDA driver. Comment it out — and the matching env
+vars — before building:
+
+```yaml
+# In docker/docker-compose.yml, comment these out on Mac:
+
+#   environment:
+#     - NVIDIA_VISIBLE_DEVICES=all
+#     - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics
+
+#   deploy:
+#     resources:
+#       reservations:
+#         devices:
+#           - driver: nvidia
+#             count: all
+#             capabilities: [gpu]
+```
+
+Keep everything else identical — bind mounts, volumes, restart policy.
+
+### 2. Build + run
 
 ```bash
-# On the Linux host: see Setup above. Once running:
+git clone --recurse-submodules git@github.com:hajekad/FotoStudioH.git
+cd FotoStudioH/docker
+docker compose build fotostudioh-agent      # ~30-45 min on Mac (slower than Linux)
 docker compose up -d fotostudioh-agent
 ```
 
 ```bash
-# On the Mac:
-# 1. Install VS Code + the "Remote - SSH" extension
-# 2. Cmd+Shift+P → "Remote-SSH: Connect to Host" → ssh user@linux-host
-# 3. Open the FotoStudioH repo from the remote filesystem
-# 4. In the integrated terminal: fsh-agent
+# Convenience alias (~/.zshrc on modern macOS):
+echo 'alias fsh-agent='"'"'docker exec -it fotostudioh-agent bash -c "cd /work && claude"'"'"'' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-All editing, all tooling, all renders run on the Linux side. Your Mac
-is the keyboard + monitor. Drag-and-drop into `assets/` works through
-VS Code's remote file explorer. Outputs in `assets/<id>/output/` show
-up in the same browser.
+### What's different on Mac without NVIDIA
 
-### Alternative: SSH + tmux (no VS Code)
+| Component | NVIDIA host | macOS host (no NVIDIA) |
+|---|---|---|
+| WhisperX / faster-whisper transcribe | GPU via CUDA, ~real-time | CPU fallback, ~5-10× slower (a 5-min source = ~5-10 min) |
+| ffmpeg renders (per-segment, concat, overlay) | `h264_nvenc` GPU encode | Falls back to `libx264` software encode, ~3-5× slower |
+| Subtitle burn-in | drawtext via CPU on both | Identical, no GPU dependency |
+| Brand-asset fetch / yt-dlp / WebFetch | Identical | Identical |
+| Agent loop, hooks, slash commands, doctrine | Identical | Identical |
 
-```bash
-# On the Mac terminal:
-ssh -t user@linux-host "cd ~/FotoStudioH && tmux new -A -s fsh && fsh-agent"
-```
+Net: a 7-cut Reels delivery that takes ~15-20 min on the NVIDIA host
+takes ~60-90 min on Mac. Functionally identical — same harness, same
+doctrine, same self-eval gate, same delivery zip. Just slower.
 
-Same agent experience, terminal-only. Detach with `Ctrl-b d`, reattach
-with the same command. Useful for long-running renders you don't want
-tied to your Mac being awake.
+### Apple Silicon vs Intel Mac
 
-### Code-review-only: clone locally, don't try to run
+The Dockerfile is x86_64-architecture (Arch Linux base + PyTorch CUDA
+wheels which are x86_64 even when CUDA itself is unused). Docker
+Desktop's Rosetta 2 emulation handles this on Apple Silicon — slower
+than native arm64 would be, but functional. Intel Macs run it
+natively at full Docker speed.
 
-```bash
-# On the Mac:
-git clone --recurse-submodules git@github.com:hajekad/FotoStudioH.git
-cd FotoStudioH
-```
-
-Everything is browsable — read `docs/`, `agents/`, the slash commands
-under `docker/claude-config/commands/`, the hooks, the tools. You can
-inspect every smoke-test output trail in `work/<slug>/`. You just
-can't `docker compose up` and have it work (the image's CUDA wheels
-fail on macOS).
-
-If you really want to try a Mac-local build with CPU-only fallback,
-the path exists but performance is brutal (faster-whisper on CPU is
-~10x slower than GPU, NVENC renders fall back to libx264 software
-encoding). Not recommended for actual work.
+If you want full-speed Apple-Silicon-native ML someday, the Dockerfile
+would need an arm64 variant with MPS (Metal Performance Shaders)
+PyTorch wheels. That's a real rebuild, not in scope today.
 
 ---
 

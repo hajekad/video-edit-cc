@@ -1,0 +1,15 @@
+# Python packages installed into /opt/ml-venv at image build time.
+# One package per line. Comments (#) and blank lines ignored.
+# Versions may be pinned (`package==1.2.3`) or left open.
+#
+# At build time the Dockerfile reads this file and pip-installs
+# everything listed (in order) on top of the baseline ml-venv
+# (torch + torchvision + torchaudio CUDA 12.1, whisperx, faster-whisper,
+# pyannote.audio, nvidia-cudnn-cu12).
+#
+# At runtime the agent uses `agent-pip-install <pkg>` which installs
+# immediately AND appends here, so the install survives the next
+# image rebuild.
+#
+# Never edit by hand outside `agent-pip-install` unless removing a
+# package — in which case delete the line and rebuild.

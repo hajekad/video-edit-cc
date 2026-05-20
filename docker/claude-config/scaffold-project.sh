@@ -96,29 +96,16 @@ ln -sfn "$RAW_TARGET" "$PROJ/raw"
 ln -sfn /opt/claude-config/hooks "$PROJ/.claude/hooks"
 ln -sfn /opt/claude-config/settings.json "$PROJ/.claude/settings.json"
 
-# 6. Initialize git if not already.
-if [ ! -d "$PROJ/.git" ]; then
-  git -C "$PROJ" init -q
-  git -C "$PROJ" config commit.gpgsign false
-  git -C "$PROJ" config user.email "agent@fotostudioh"
-  git -C "$PROJ" config user.name "fsh-agent"
-  cat > "$PROJ/.gitignore" <<'GI'
-# binary outputs — keep edl.json, manifest.json, transcripts/, but NOT the renders.
-edit/preview.mp4
-edit/final.mp4
-edit/clips_graded/*.mp4
-edit/animations/*/render.mp4
-edit/animations/*/render.webm
-edit/verify/*.png
-edit/verify/*.jpg
-# but DO track structure
-!edit/clips_graded/.gitkeep
-!edit/animations/.gitkeep
-!edit/verify/.gitkeep
-GI
-  touch "$PROJ/edit/clips_graded/.gitkeep" \
-        "$PROJ/edit/animations/.gitkeep" \
-        "$PROJ/edit/verify/.gitkeep"
+# 6. DO NOT init per-project git. The parent /work/.git is the agent's
+#    "pacifier" git (per the project-anchor rationale documented in
+#    /work/README.md). A per-project .git/ here would make the outer
+#    work/ repo treat this subdir as an embedded repo / gitlink, which
+#    breaks the curated text-slice tracking pattern in /work/.gitignore.
+#    The agent's auto-commit hook commits against the parent /work/.git
+#    against this project's path.
+if [ -d "$PROJ/.git" ]; then
+  echo "scaffold: removing stale per-project .git (parent /work/.git is the tracking surface)" >&2
+  rm -rf "$PROJ/.git"
 fi
 
 # 7. Read user prompt if present.

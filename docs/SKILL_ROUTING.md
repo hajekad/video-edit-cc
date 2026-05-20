@@ -1,9 +1,30 @@
 # Skill Routing
 
 This is the "for task X use repo Y" lookup the in-container agent reads
-when deciding which of the 19 cloned skill repos to invoke.
+when deciding which of the 40+ cloned skill repos to invoke.
 
-## The 19 repos (under `/agents/`)
+## First-check-then-write (mandatory before any new tool)
+
+Before authoring ANY new render helper, NLE-export script, transcribe
+wrapper, overlay engine, or composition utility, run:
+
+```bash
+skill-grep <task-keywords>
+```
+
+`skill-grep` searches every `/agents/<repo>/SKILL.md`, `README.md`,
+`CLAUDE.md`, `AGENTS.md`, and the filenames under `helpers/`, `lib/`,
+`skills/`, `src/`, `scripts/`, `tools/`, `bin/`. Ranked output surfaces
+the best candidates with their matching lines. Read the top match's
+SKILL.md before writing anything.
+
+Agent re-implementation history we're trying to prevent:
+- `build_xml.py` from scratch (smoke #1+#2) — `agents/buttercut` had it
+- `render_cut.py` from scratch (smoke #3) — `agents/video-use/helpers/render.py` had it
+- Sine-tone music substitutes — `agents/fsh-royalty-free-music` + `pitch-music-fetch` had it
+- ASS subtitle path — drawtext + `burn-subtitles` was already preferred per doctrine
+
+## The 40+ repos (under `/agents/`)
 
 Three tiers ranked by maturity and fit:
 

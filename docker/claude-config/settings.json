@@ -26,6 +26,10 @@
           },
           {
             "type": "command",
+            "command": "/root/.claude/hooks/memory-check.sh"
+          },
+          {
+            "type": "command",
             "command": "/root/.claude/hooks/loop-not-done.sh"
           },
           {
@@ -47,7 +51,9 @@
   "spinnerTipsEnabled": false,
   "spinnerVerbs": {
     "mode": "replace",
-    "verbs": ["Working"]
+    "verbs": [
+      "Working"
+    ]
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",

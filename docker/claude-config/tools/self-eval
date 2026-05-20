@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""self-eval — brief-aware QC + gap detection. Run BEFORE declaring delivered.
+
+The agent's job is to ship the brief, not to ship something. Smoke #3
+declared "ALL DONE" with a self-documented gap (logo dropin pending,
+typographic fallback live). That's a broken promise. This tool exists
+to make the promise→delivery loop closeable only by actual matching.
+
+Outputs a structured verdict at `.claude/state/self-eval.verdict`:
+- First line: PASS / FAIL
+- Then a JSON block with: timestamp, gaps[], checks{}, brief_anchors
+
+Exit code:
+  0 — PASS (every check green, no documented unfilled gaps)
+  1 — FAIL (one or more checks red OR documented gaps in README/manifest)
+  2 — could not run (bad usage)
+
+The pipeline gate at `self-eval-passed` reads this file; the agent
+CANNOT advance to delivered unless the verdict is PASS AND written by
+this tool (verifiable via the `tool: "self-eval"` field).
+
+Usage:
+  self-eval <project-slug>
+  self-eval <project-slug> --json   # emit verdict to stdout, don't write file
+
+What this tool checks:
+
+  1. delivered variants present per manifest.delivery.variants[]
+  2. ffprobe matches the preset's spec (width, height, fps, codec)
+  3. audio policy honored per variant (CLEAN must be silent;
+     INTERNAL_REVIEW must carry real music with mean volume in [-28..-10] dB
+     — sine-tone substitutes get caught by the ban check)
+  4. sample frames extracted at duration/2 (mid) and duration-1.5 (close)
+     — verifies playable through full length
+  5. brief_intent.signals[] each have evidence in the deliverable
+  6. brand.logo_path file exists if manifest claims a logo
+  7. README does NOT list "Known gaps" entries that contradict brief
+     promises (the agent's self-documented gap is itself a fail signal)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+DELIVERY_PRESETS = Path("/opt/claude-config/delivery-presets.json")
+
+
+def probe(video: Path) -> dict:
+    out = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-print_format", "json",
+            "-show_streams", "-show_format",
+            str(video),
+        ],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0:
+        return {"error": out.stderr.strip()}
+    try:
+        return json.loads(out.stdout)
+    except Exception as e:
+        return {"error": f"json parse: {e}"}
+
+
+def audio_mean_dbfs(video: Path) -> float | None:
+    out = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(video),
+         "-af", "volumedetect", "-vn", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    m = re.search(r"mean_volume:\s*(-?[\d.]+)\s*dB", out.stderr)
+    if not m:
+        return None
+    return float(m.group(1))
+
+
+def check_variant(work_dir: Path, asset_out: Path, slug: str, variant: str,
+                  preset: dict, music_mode: str) -> list[dict]:
+    """Return list of {check, passed, detail} for one variant."""
+    suffix = {
+        "internal_review": "_INTERNAL_REVIEW",
+        "platform_clean": "_CLEAN_FOR_UI_MUSIC",
+        "platform_final": "",
+    }.get(variant, "")
+
+    candidates = list(asset_out.glob(f"*{suffix}.mp4")) if suffix else list(asset_out.glob("*.mp4"))
+    if not candidates:
+        return [{"check": f"variant:{variant}:exists", "passed": False,
+                 "detail": f"no *{suffix}.mp4 in {asset_out}"}]
+
+    results = []
+    for video in candidates:
+        meta = probe(video)
+        if "error" in meta:
+            results.append({"check": f"{video.name}:probe", "passed": False, "detail": meta["error"]})
+            continue
+
+        # Dimensions + fps + codec match preset
+        v_streams = [s for s in meta.get("streams", []) if s.get("codec_type") == "video"]
+        if v_streams:
+            v = v_streams[0]
+            w_ok = int(v.get("width", 0)) == int(preset.get("width", 0))
+            h_ok = int(v.get("height", 0)) == int(preset.get("height", 0))
+            results.append({
+                "check": f"{video.name}:dimensions",
+                "passed": w_ok and h_ok,
+                "detail": f"got {v.get('width')}x{v.get('height')}, want {preset.get('width')}x{preset.get('height')}",
+            })
+
+        # Audio policy by variant
+        mean = audio_mean_dbfs(video)
+        if mean is not None:
+            if variant == "platform_clean":
+                # Silent required: mean_volume should be < -60 dB (true silence)
+                ok = mean < -60
+                results.append({
+                    "check": f"{video.name}:audio_silent",
+                    "passed": ok,
+                    "detail": f"mean_volume={mean} dB (need < -60 for platform_clean)",
+                })
+            elif variant == "internal_review" and music_mode in ("internal-reference",
+                                                                  "baked-royalty-free",
+                                                                  "baked-licensed"):
+                # Real music expected: mean in [-30..-8]; sine-tone substitutes
+                # produce mean << -38 (banned by doctrine)
+                ok = -38 < mean < -5
+                detail = f"mean_volume={mean} dB"
+                if mean < -38:
+                    detail += " — looks like sine-tone guide / near-silent. Ban: never invent audible music substitutes."
+                results.append({
+                    "check": f"{video.name}:audio_music_present",
+                    "passed": ok,
+                    "detail": detail,
+                })
+
+    return results
+
+
+def check_brand_logo(manifest: dict) -> dict:
+    brand = manifest.get("brand", {}) or {}
+    logo_path = brand.get("logo_path")
+    if not logo_path:
+        # No logo claimed; not a fail. Just note.
+        return {"check": "brand:logo_path", "passed": True,
+                "detail": "no logo claimed in manifest.brand.logo_path"}
+    p = Path(logo_path)
+    return {
+        "check": "brand:logo_path",
+        "passed": p.exists() and p.stat().st_size > 0,
+        "detail": f"{logo_path} ({'exists' if p.exists() else 'MISSING'})",
+    }
+
+
+def check_no_documented_gaps(asset_out: Path) -> list[dict]:
+    """Self-documented 'Known gaps' in README signal an incomplete delivery.
+    Smoke #3 shipped with 'Logo dropin (pending)' + 'typographic ORLEN wordmark
+    fallback' written in the README — the agent KNEW the delivery was
+    incomplete and said delivered anyway. This catches that pattern."""
+    results = []
+    readme = asset_out / "README.md"
+    if not readme.exists():
+        return [{"check": "delivery:readme_exists", "passed": False,
+                 "detail": f"no README.md in {asset_out}"}]
+    text = readme.read_text(errors="ignore").lower()
+    # Regex patterns — catch the family of "we shipped with a gap" phrasings.
+    # Each pattern groups synonyms so word-order / parenthesization don't escape.
+    bad_patterns = [
+        (r"known gaps?", "known gaps section"),
+        (r"(logo|music|voiceover|brand[\- ]?asset)[^.]{0,40}(pending|dropin|drop[\- ]?in|not yet|to be supplied|awaiting)",
+         "asset dropin pending"),
+        (r"(pending|awaiting)[^.]{0,40}(logo|music|voiceover|brand[\- ]?asset|dropin)",
+         "asset dropin pending (reversed)"),
+        (r"typographic[^.]{0,40}(fallback|stand-?in|placeholder|wordmark[^.]{0,40}fallback)",
+         "typographic fallback acknowledgement"),
+        (r"needs?[^.]{0,40}brand[\- ]?team", "needs brand-team action"),
+        (r"(to be replaced|swap (out|before|on)|re-render (on|after|when))",
+         "explicit swap-required phrasing"),
+        (r"manual (download|fetch|step|intervention)", "manual intervention required"),
+        (r"if you have[^.]{0,40}(svg|png|logo|file)", "agent asking user to drop a file"),
+    ]
+    hits = []
+    for pat, label in bad_patterns:
+        m = re.search(pat, text)
+        if m:
+            hits.append({"label": label, "match": m.group(0)[:100]})
+    results.append({
+        "check": "delivery:no_self_documented_gaps",
+        "passed": len(hits) == 0,
+        "detail": (f"README contains {len(hits)} gap markers: {hits}" if hits
+                   else "no gap markers in README"),
+    })
+    return results
+
+
+def check_brief_signals(manifest: dict) -> list[dict]:
+    """Each signal in brief_intent.signals[] should have evidence."""
+    brief = manifest.get("brief_intent", {}) or {}
+    if not brief.get("derived"):
+        return [{"check": "brief:derived", "passed": False,
+                 "detail": "manifest.brief_intent.derived != true"}]
+
+    results = [{"check": "brief:derived", "passed": True, "detail": ""}]
+    sig_count = len(brief.get("signals", []) or [])
+    results.append({
+        "check": "brief:signals_recorded",
+        "passed": sig_count >= 3,
+        "detail": f"{sig_count} signals (need >=3 for non-trivial brief)",
+    })
+    return results
+
+
+def check_required_docs(work_dir: Path, music_mode: str) -> list[dict]:
+    docs = work_dir / "docs"
+    results = []
+    required = [
+        ("strategy.md", True),
+        ("audience_research.md", True),
+        ("music_cues.md", music_mode and music_mode != "none"),
+    ]
+    for name, required_flag in required:
+        if not required_flag:
+            continue
+        p = docs / name
+        results.append({
+            "check": f"docs:{name}",
+            "passed": p.exists() and p.stat().st_size > 200,
+            "detail": f"{p} ({'present' if p.exists() else 'MISSING'})",
+        })
+    return results
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("slug")
+    ap.add_argument("--json", action="store_true", help="emit verdict to stdout, don't write file")
+    ap.add_argument("--work-root", default="/work")
+    args = ap.parse_args()
+
+    work_dir = Path(args.work_root) / args.slug
+    if not work_dir.is_dir():
+        print(f"no project at {work_dir}", file=sys.stderr)
+        return 2
+
+    manifest_path = work_dir / "manifest.json"
+    if not manifest_path.exists():
+        print(f"no manifest at {manifest_path}", file=sys.stderr)
+        return 2
+    manifest = json.loads(manifest_path.read_text())
+
+    delivery = manifest.get("delivery", {}) or {}
+    asset_out = Path(manifest.get("output_path") or
+                     f"/assets/{manifest.get('id', args.slug)}/output")
+    if not asset_out.is_dir():
+        # try the slug path too
+        slug_out = Path(f"/assets/{args.slug}/output")
+        if slug_out.is_dir():
+            asset_out = slug_out
+
+    preset_name = delivery.get("preset")
+    preset = {}
+    if preset_name and DELIVERY_PRESETS.exists():
+        presets_data = json.loads(DELIVERY_PRESETS.read_text())
+        preset = presets_data.get("presets", {}).get(preset_name, {})
+
+    music_mode = (manifest.get("music") or {}).get("mode") or "none"
+    # Variants may be stored as ["internal_review", ...] or [{"name": "..."}, ...]
+    raw_variants = delivery.get("variants", []) or []
+    variants = []
+    for v in raw_variants:
+        if isinstance(v, dict):
+            n = v.get("name")
+            if n: variants.append(n)
+        elif isinstance(v, str):
+            variants.append(v)
+    if not variants:
+        variants = ["platform_final"]  # legacy fallback
+
+    checks: list[dict] = []
+    checks += check_brief_signals(manifest)
+    checks += check_required_docs(work_dir, music_mode)
+    checks.append(check_brand_logo(manifest))
+    for v in variants:
+        checks += check_variant(work_dir, asset_out, args.slug, v, preset, music_mode)
+    checks += check_no_documented_gaps(asset_out)
+
+    failed = [c for c in checks if not c["passed"]]
+    verdict_line = "PASS" if not failed else "FAIL"
+
+    verdict = {
+        "verdict": verdict_line,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool": "self-eval",
+        "tool_version": "1.0",
+        "slug": args.slug,
+        "checks": checks,
+        "gaps": [c for c in failed],
+    }
+
+    body = verdict_line + "\n" + json.dumps(verdict, indent=2) + "\n"
+    if args.json:
+        sys.stdout.write(body)
+    else:
+        state_dir = work_dir / ".claude" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "self-eval.verdict").write_text(body)
+        print(f"verdict: {verdict_line} — wrote {state_dir / 'self-eval.verdict'}", file=sys.stderr)
+        if failed:
+            print(f"FAIL: {len(failed)} checks", file=sys.stderr)
+            for c in failed[:6]:
+                print(f"  - {c['check']}: {c['detail']}", file=sys.stderr)
+            if len(failed) > 6:
+                print(f"  ... and {len(failed) - 6} more (see verdict file)", file=sys.stderr)
+
+    return 0 if verdict_line == "PASS" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

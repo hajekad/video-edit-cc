@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""skill-grep — surface existing /agents/ skills relevant to a task.
+
+Smoke #3 had the agent write render_cut.py from scratch when
+agents/video-use/helpers/render.py exists. build_xml.py from scratch
+when agents/buttercut/lib/buttercut/fcp7.rb is the canonical
+NLE-export skill. The agent has 40+ cloned skill repos under /agents/
+and re-implements work that's already in them.
+
+This tool exists to make existing skills DISCOVERABLE the moment the
+agent thinks about writing new code. Doctrine: before authoring ANY
+new tool, run `skill-grep <task-keywords>` first. The lookup is fast
+(grep over SKILL.md + README + filenames) and the ranking surfaces
+the relevant skill repos so the agent reads + invokes instead of
+re-implementing.
+
+Usage:
+  skill-grep <keyword> [<keyword> ...]
+  skill-grep render concat ffmpeg
+  skill-grep transcribe whisper diarize
+  skill-grep "NLE export FCPXML"
+
+Output: ranked list of /agents/<repo>/ candidates with the relevant
+snippet, ready for the agent to read with Read or grep deeper.
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+AGENTS_ROOT = Path("/agents")
+SKILL_FILES = ("SKILL.md", "README.md", "CLAUDE.md", "AGENTS.md")
+
+
+def score_repo(repo: Path, keywords: list[str]) -> tuple[int, list[tuple[str, str]]]:
+    """Return (score, hits) for a single repo dir."""
+    score = 0
+    hits: list[tuple[str, str]] = []  # (filename, matched-line)
+
+    # Repo name itself matching a keyword is a strong signal
+    name = repo.name.lower()
+    for kw in keywords:
+        if kw.lower() in name:
+            score += 10
+            hits.append(("<repo-name>", repo.name))
+
+    # Scan the top-level skill-marker files
+    for fname in SKILL_FILES:
+        f = repo / fname
+        if not f.exists() or not f.is_file():
+            continue
+        try:
+            text = f.read_text(errors="ignore")
+        except Exception:
+            continue
+        # Title / description / first 50 lines are the most important
+        head = "\n".join(text.split("\n")[:50]).lower()
+        body = text.lower()
+        for kw in keywords:
+            kw_l = kw.lower()
+            head_hits = len(re.findall(re.escape(kw_l), head))
+            body_hits = len(re.findall(re.escape(kw_l), body))
+            score += head_hits * 3 + (body_hits - head_hits) * 1
+            if head_hits or body_hits:
+                # Capture the first matching line for the report
+                for line in text.split("\n"):
+                    if kw_l in line.lower():
+                        hits.append((fname, line.strip()[:140]))
+                        break
+
+    # Filenames of top-level scripts under helpers/, lib/, skills/, src/
+    for sub in ("helpers", "lib", "skills", "src", "scripts", "tools", "bin"):
+        sub_dir = repo / sub
+        if not sub_dir.is_dir():
+            continue
+        for f in sub_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            stem = f.name.lower()
+            for kw in keywords:
+                if kw.lower() in stem:
+                    score += 5
+                    hits.append((str(f.relative_to(repo)), f"<filename match>"))
+
+    return score, hits
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("keywords", nargs="+", help="space-separated task keywords")
+    ap.add_argument("--limit", type=int, default=8, help="max candidates to print")
+    ap.add_argument("--threshold", type=int, default=2, help="minimum score to surface")
+    args = ap.parse_args()
+
+    if not AGENTS_ROOT.is_dir():
+        print(f"no {AGENTS_ROOT} — skill catalog unavailable", file=sys.stderr)
+        return 2
+
+    candidates: dict[Path, tuple[int, list]] = {}
+    for repo in sorted(AGENTS_ROOT.iterdir()):
+        if not repo.is_dir() or repo.name.startswith("."):
+            continue
+        score, hits = score_repo(repo, args.keywords)
+        if score >= args.threshold:
+            candidates[repo] = (score, hits)
+
+    ranked = sorted(candidates.items(), key=lambda kv: -kv[1][0])[: args.limit]
+
+    if not ranked:
+        print(f"no /agents/ skills matched: {' '.join(args.keywords)}", file=sys.stderr)
+        print("Before writing a new tool from scratch, consider:", file=sys.stderr)
+        print("  - widening the search ('render' instead of 'render-vertical-reels')", file=sys.stderr)
+        print("  - reading /docs/SKILL_ROUTING.md for the canonical task-to-skill table", file=sys.stderr)
+        return 1
+
+    print(f"# skill-grep: {' '.join(args.keywords)}")
+    print()
+    print(f"# Found {len(ranked)} candidate skill(s). READ the top match's")
+    print(f"# SKILL.md before authoring anything new. Doctrine in /agents/CLAUDE.md:")
+    print(f"# 'first check, then write'.")
+    print()
+    for repo, (score, hits) in ranked:
+        print(f"## {repo}  (score={score})")
+        seen = set()
+        for fname, line in hits[:8]:
+            key = (fname, line)
+            if key in seen:
+                continue
+            seen.add(key)
+            print(f"  [{fname}] {line}")
+        if (repo / "SKILL.md").exists():
+            print(f"  -> READ: {repo}/SKILL.md")
+        elif (repo / "README.md").exists():
+            print(f"  -> READ: {repo}/README.md")
+        print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

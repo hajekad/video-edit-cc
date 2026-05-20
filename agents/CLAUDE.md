@@ -7,18 +7,123 @@ prompt.txt) and produce edited video deliverables in
 your Stop hook keeps assigning the next action until the project hits
 `stage: delivered`.
 
+## The two operating stances (read these first, every time)
+
+### 0. Never declare delivered without green self-eval
+
+Self-eval is not optional. The agent's job is to ship the brief, not
+to ship something. Smoke #3 declared "ALL DONE" with a README that
+ITSELF documented gaps ("logo dropin pending", "typographic fallback")
+— a broken promise. The harness now enforces:
+
+- Pipeline gate at `self-eval-passed` requires `.claude/state/self-eval.verdict`
+  authored by `/opt/claude-config/tools/self-eval`, first line PASS,
+  written AFTER the latest output mp4 modification
+- The tool checks: variant presence, ffprobe vs preset, audio policy
+  (CLEAN silent + INTERNAL_REVIEW with real music in [-38..-5] dBFS),
+  brand logo file exists, required docs present, README has no gap
+  markers (regex catches "logo dropin pending", "typographic
+  fallback", "manual download", "if you have the SVG", etc.)
+- You cannot hand-write a PASS verdict — the gate verifies the
+  `"tool": "self-eval"` field
+
+When self-eval comes back FAIL, your next subtask is the GAP FIX, not
+the next cut. Read every check in the verdict file, fix every red
+item, re-run self-eval, repeat until PASS. Then advance.
+
+### 1. Promise the brief, then wire what's missing
+
+The capability matrix tracks what's wired right now. It does NOT define
+what you may promise. When the brief calls for X and X is at
+`engine-not-wired` or `missing`, your response is **yes** + **wire it**,
+not "I can't because the engine isn't wired." Trust forms by promises
+kept, breaks when promises get quietly downgraded.
+
+The five honest refusals: hardware-physical (won't fit in 12 GB VRAM),
+paid-without-auth, hard-classifier-blocked after exhausting single-URL
++ drop-in paths, user explicitly forbade it, distribution-licensing
+without license proof. Everything else, you wire.
+
+When something errors mid-flight: diagnose and fix in-flight. Read the
+error, fix the cause (install missing dep, route around broken path,
+write a wrapper). Only escalate when the root cause is genuinely
+beyond reach — and even then, propose the concrete unstick path.
+
+### 1b. First check, then write — never re-implement what /agents/ already has
+
+There are 40+ cloned skill repos under `/agents/`. Before authoring
+ANY new tool, render helper, NLE-export script, transcribe wrapper,
+overlay engine, or composition utility, run:
+
+```bash
+skill-grep <task-keywords>
+```
+
+Examples of work the agent has historically re-implemented from scratch
+when an existing skill repo had it:
+
+- **NLE-XML export** — `agents/buttercut/lib/buttercut/fcpx.rb` (FCPXML 1.8)
+  + `fcp7.rb` (FCP7/Premiere/Resolve). Don't write `build_xml.py` from
+  scratch.
+- **Per-segment extract + concat + grade + subs** —
+  `agents/video-use/helpers/render.py` already enforces the 12 Hard
+  Rules. Don't write `render_cut.py` from scratch.
+- **WhisperX-based transcribe + diarize** — `agents/buttercut`
+  + `agents/Claude-Video-Editor-Plugin/skills/burn-subtitles/`. Use
+  `/opt/claude-config/tools/asr` (the wrapper) or these.
+- **HTML/CSS overlays** — `agents/hyperframes` and
+  `agents/hyperframes-student-kit`. Don't render PNG sequences by
+  hand.
+- **Scene detection** — `agents/PySceneDetect`. Don't roll a custom
+  threshold-on-frame-diff.
+- **Face anonymization** — `agents/EgoBlur`. Don't compose a custom
+  pixelation mask.
+- **Talking-head generation** — `agents/MuseTalk`. (Out of MVP scope
+  per CAPABILITY_MATRIX but the engine is there.)
+
+The rule: **`skill-grep` BEFORE you write `tool-foo.py`**. The lookup
+takes < 1s. If `skill-grep` returns a candidate, read its `SKILL.md` /
+`README.md` and invoke it. Only write from scratch when `skill-grep`
+returns nothing relevant — in which case, what you write goes to
+`/agents/fsh-tools/<name>` per the self-extension surface, NOT
+ad-hoc to `/work/<slug>/edit/`.
+
+The `/docs/SKILL_ROUTING.md` table is the canonical task-to-skill map;
+`skill-grep` is the fast-path lookup over the actual files.
+
+### 2. Grow the harness from inside
+
+When the harness lacks what the work needs, ADD IT:
+
+- New system pkg: `agent-install <pkg>` (auto-manifests for next rebuild)
+- New Python pkg: `agent-pip-install <pkg>` (same)
+- New tool: write to `/agents/fsh-tools/<name>`, chmod +x (bind-mounted, on PATH, survives rebuild)
+- New hook: write to `/agents/fsh-hooks/<name>.sh`
+- New skill: `/agents/<name>/SKILL.md`
+- New doctrine: `/docs/<NAME>.md`
+- New persona: append to `/agents/fsh-music-mood-bridge/personas.yaml`
+- New camera quirk: append to `/docs/SOURCE_QUIRKS.md`
+
+When you wire a new capability, update `/docs/CAPABILITY_MATRIX.md` in
+the SAME change. The matrix is a tracking surface, not an excuse
+surface. Every entry at `engine-not-wired` is a task list item, not
+a "can't do."
+
+Full doctrine: `/docs/HARNESS_SELF_EXTENSION.md`.
+
 ## Hard reading order on every new project
 
 1. This file.
 2. `/docs/BRIEF_INTERPRETATION.md` — how to turn a thin brief into a full deliverable spec. **Required**. The agent that doesn't read this ships generic edits and needs three reprompts to extract platform, audience, brand.
 3. `/docs/DROPIN_SCAFFOLD_PATTERN.md` — when the classifier blocks autonomous fetch of an external asset (music, logo, license doc, voiceover), call `/opt/claude-config/tools/dropin-scaffold` to build the user-drop folder + merge script, then ship the rest. Never grind on a blocked fetch.
-4. `/docs/ARCHITECTURE.md` — pipeline stages, gates, container layout.
-5. `/docs/CAPABILITY_MATRIX.md` — what's wired up vs. not. Don't promise capabilities still at `engine-not-wired`.
-6. `/docs/SKILL_ROUTING.md` — which of the 19 cloned repos under `/agents/` to invoke for each pipeline action.
-7. `/docs/ISSUE_TRACKING.md` — issue file schema + reviewer-gate protocol.
-8. `/opt/claude-config/delivery-presets.json` — platform format presets (Reels / TikTok / Shorts / LinkedIn / YouTube / broadcast). Always read the preset before picking output_spec.
-9. The user's prompt, in `/assets/<id>/prompt.txt` if present, OR conversation context.
-10. `/work/<id>/project.md` if resuming an existing project.
+4. `/docs/HARNESS_SELF_EXTENSION.md` — **how you grow the harness when it lacks what the work needs**. New system packages (`agent-install`), new Python deps (`agent-pip-install`), new tools (`/agents/fsh-tools/`), new hooks (`/agents/fsh-hooks/`), new doctrines (`/docs/`), new skills (`/agents/<name>/`). Every addition must survive the next image rebuild — the doctrine tells you which manifest to update. The external pilot has stepped away; the harness grows from inside now.
+5. `/docs/ARCHITECTURE.md` — pipeline stages, gates, container layout.
+6. `/docs/CAPABILITY_MATRIX.md` — descriptive tracking of what's wired up vs. not. **Promise the full feature set the brief calls for; when something is at `engine-not-wired` or `missing`, wiring it in is your next subtask.** See HARNESS_SELF_EXTENSION § Promise, then wire.
+7. `/docs/SKILL_ROUTING.md` — which of the 19 cloned repos under `/agents/` to invoke for each pipeline action.
+8. `/docs/ISSUE_TRACKING.md` — issue file schema + reviewer-gate protocol.
+9. `/opt/claude-config/delivery-presets.json` — platform format presets (Reels / TikTok / Shorts / LinkedIn / YouTube / broadcast). Always read the preset before picking output_spec.
+10. The user's prompt, in `/assets/<id>/prompt.txt` if present, OR conversation context.
+11. `/work/<id>/project.md` if resuming an existing project.
 
 ## Pipeline (memorize this)
 
@@ -134,17 +239,51 @@ The `fsh-royalty-free-music` skill has three modes
 (`baked-royalty-free`, `internal-reference`, `baked-licensed`). Pick
 from artifact lifecycle, not from a blanket "copyright = never" rule.
 
-## When you encounter a capability gap
+## When you encounter a capability gap — promise, then wire
 
-Look it up in `/docs/CAPABILITY_MATRIX.md`.
+Read `/docs/HARNESS_SELF_EXTENSION.md` first if you haven't. Then look
+the capability up in `/docs/CAPABILITY_MATRIX.md`:
 
-- **production-ready** — invoke per SKILL_ROUTING.md
-- **wired-unvalidated** — invoke, but file a `Test` issue so the next
-  session validates it
-- **engine-not-wired** — file a `Capability` issue with `stage:
-  engine-not-wired`, then propose a workaround OR pause and ask the
-  user to authorize the build-out
-- **missing** — out of scope. Tell the user and propose alternatives
+- **production-ready** — invoke per SKILL_ROUTING.md.
+- **wired-unvalidated** — invoke, AND file a `Test` issue so the next
+  session validates it on real footage.
+- **engine-not-wired** — **wire it in. Now.** The skill repo is
+  already cloned under `/agents/`; the gap is just that no caller
+  invokes it. Author the caller (a new tool in `/agents/fsh-tools/`,
+  a new step in the relevant slash command, a new hook), invoke it,
+  and update `/docs/CAPABILITY_MATRIX.md` to `wired-unvalidated` in
+  the same commit. The self-extension scaffolding exists precisely so
+  this is a normal-day task, not a special build-out.
+- **missing** — first ask whether it's truly missing or just unfound.
+  If a library / API / skill repo exists anywhere reachable, install
+  it via `agent-install` / `agent-pip-install` / git clone into
+  `/agents/`, author the caller, and proceed. Only declare a hard
+  refusal when the constraint is real (hardware-physical, paid-API-
+  only, classifier-blocked even via single-URL fetch, user explicitly
+  forbade it). Document the refusal in `docs/issues/` with the
+  specific reason, not as a vague "out of scope."
+
+**Promise the full feature set even when something isn't wired yet.**
+If the brief calls for X and X is engine-not-wired or missing, your
+next subtask is to wire/build X — not to refuse, and not to ship
+without it. Trust forms when promises are kept; trust breaks the
+moment a promise gets quietly downgraded to "I couldn't because the
+engine wasn't wired." The director-grade user doesn't care which
+internal stage of the matrix a capability is at; they care that the
+deliverable matches the brief. The matrix is your tracking surface,
+not your excuse surface.
+
+**When something errors — diagnose and fix in-flight.** First debug
+attempt: read the error, check the immediate cause (missing dep,
+wrong path, classifier hit, version drift), fix it. Second attempt:
+fix the underlying cause (pin the dep, update the manifest, switch
+to a working alternative, write a small wrapper). Only escalate to
+the user when the root cause is genuinely outside your reach
+(physical hardware, paid service, blocked credential) — and even
+then, propose the concrete unstick path, don't just report. The
+agent that ships with watermarks because the cloud fetch was blocked
+is doing it right. The agent that stops because pip threw an import
+error is doing it wrong.
 
 ## Talk like an editor when in conversation with the user
 

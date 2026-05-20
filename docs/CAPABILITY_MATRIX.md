@@ -1,19 +1,34 @@
 # Capability Matrix
 
-Tracks every capability the FotoStudioH agent claims, the on-disk
+**Descriptive tracker, not a refusal surface.** This file records the
+current wiring state of every capability. It does NOT define what the
+agent may promise to the user — the agent promises the full brief and
+wires what's missing per `/docs/HARNESS_SELF_EXTENSION.md` §
+"Promise, then wire". A row at `engine-not-wired` is a task list
+entry, not a "can't do."
+
+Tracks every capability the FotoStudioH agent supports, the on-disk
 evidence required to consider it "production-ready", and which skill
 repo backs it.
 
 Stage ladder for **each capability** (not the same as the per-project
 pipeline ladder in ARCHITECTURE.md):
 
-| Stage | Meaning |
-|---|---|
-| **missing** | No code path exists. Agent doesn't even know about this capability. |
-| **state-only** | A toggle exists in manifest/settings but the engine isn't wired. |
-| **engine-not-wired** | Skill repo is cloned + readable, but no caller in the FSH pipeline invokes it yet. |
-| **wired-unvalidated** | Pipeline invokes it; no end-to-end test on real footage yet. |
-| **production-ready** | Validated end-to-end on real footage with on-disk evidence. |
+| Stage | Meaning | Agent response when brief calls for it |
+|---|---|---|
+| **missing** | No code path exists in repo. | Install / clone / build the minimum that satisfies the brief. `agent-install`, `agent-pip-install`, `git clone <repo> /agents/<name>/`. Then proceed. |
+| **state-only** | A toggle exists in manifest/settings but the engine isn't wired. | Wire the engine in `/agents/fsh-tools/<name>` or as a step in the relevant slash command. Then invoke. |
+| **engine-not-wired** | Skill repo is cloned + readable, but no caller in the FSH pipeline invokes it yet. | Author the caller, invoke, update this matrix to `wired-unvalidated` in the same change. |
+| **wired-unvalidated** | Pipeline invokes it; no end-to-end test on real footage yet. | Invoke. Validate on real footage. Promote to `production-ready` when evidence lands. |
+| **production-ready** | Validated end-to-end on real footage with on-disk evidence. | Invoke per SKILL_ROUTING.md. |
+
+**Hard refusal is reserved for**: hardware-physical (LTX-2 doesn't
+fit in 12 GB VRAM), paid-only without user authorization, hard
+classifier blocks that survive single-URL fetch + drop-in scaffold,
+user explicitly forbade it, distribution-licensing for public
+deliverables without license proof. Document the refusal in
+`docs/issues/` with the specific reason — never a vague "out of
+scope."
 
 | Capability | Stage | Primary skill | Evidence required for production-ready |
 |---|---|---|---|
@@ -47,12 +62,12 @@ pipeline ladder in ARCHITECTURE.md):
 | NLE export Resolve | engine-not-wired | `agents/buttercut/lib/buttercut/fcp7.rb` (xmeml v5 works) | same XML; opens in DaVinci Resolve |
 | TTS (local, GPU) | engine-not-wired | F5-TTS or XTTS v2 via `agent-install` | `edit/voiceover/<name>.mp3` matches script |
 | Music gen (local) | missing | needs local ACE-Step alt | — |
-| Watermark removal | missing | requires LTX-2-class video gen (cloud-only) | out of scope MVP |
-| Talking-head (image+audio→video) | missing | SadTalker — cloud (Modal/RunPod) | out of scope MVP |
+| Watermark removal | missing — hard refusal | requires LTX-2-class video gen (>12GB VRAM, cloud-only) | hardware-physical refusal per § Hard refusals; propose local-fits alternative (light-wrap masking, manual crop) |
+| Talking-head (image+audio→video) | missing — hard refusal | SadTalker / live portrait — cloud-only at full res | hardware-physical refusal; propose static-image + Ken Burns + VO instead |
 | Image gen (local) | engine-not-wired | FLUX.2 Klein 4B fits in 12GB VRAM | `edit/images/<n>.png` produced by local diffusers pipeline |
 | Image edit (local) | engine-not-wired | Qwen-Image-Edit fits in 12GB VRAM | edited image at requested style |
-| Multicam sync | missing | no skill in collection (Selects-only) | not viable without commercial Selects MCP |
-| B-roll auto-insert | missing | no skill in collection | not viable in current set |
+| Multicam sync | missing | best OSS = `agents/PySceneDetect` + audio-waveform align; closed-source commercial (Selects MCP) is paid-only | wire OSS path via timecode + audio-fingerprint align; refuse only if user demands frame-precise sub-10ms which truly needs Selects |
+| B-roll auto-insert | missing | best OSS = transcript-keyword × thumbnail-similarity search across `raw/`; no canonical skill yet | author `/agents/fsh-tools/broll-suggest` when first project needs it; wire from there |
 | Auto-cut silences | engine-not-wired | `Claude-Video-Editor-Plugin/skills/auto-cut-silences/` (wraps `auto-editor`) | timeline with silent segments removed, no clipped speech |
 | GPU encode (NVENC) | engine-not-wired | ffmpeg `-c:v h264_nvenc` | `final.mp4` encoded with NVENC; 4x+ faster than libx264 |
 | Brief interpretation (auto-derive platform/audience/brand) | wired-unvalidated | `/docs/BRIEF_INTERPRETATION.md` + `/inventory` three-pass read | `manifest.brief_intent.derived == true` with WHY lines for platforms / audience / brand / delivery_pattern |
@@ -68,15 +83,36 @@ pipeline ladder in ARCHITECTURE.md):
 | Drop-in scaffold (when classifier blocks fetch) | wired-unvalidated | `/opt/claude-config/tools/dropin-scaffold` | `/assets/<id>/<asset>/README.md` + `/work/<slug>/edit/add_<asset>.py` merge script + `manifest.<asset>.pending_dropin = true` |
 | Variant build (internal_review + platform_clean + platform_final routing) | wired-unvalidated | `/opt/claude-config/tools/build-variants` | per-variant outputs with correct suffix and music-mode-aware audio handling |
 
-## Out-of-scope (MVP)
+## Hard refusals (the only honest "can't")
 
-- Anything requiring cloud GPU (LTX-2 22B video gen, SadTalker at full res,
-  large-model dewatermark). Investor constraint: fully local IT.
-- Multicam editing, B-roll matching, frame-precise (10ms) cuts —
-  require Selects MCP which is closed-source commercial.
+These are the limits that no self-extension can route around without
+breaking an explicit user constraint. Everything outside this list
+is a task, not a refusal.
+
+- **Cloud-GPU-only models** (LTX-2 22B video gen, SadTalker at full
+  res, large-model dewatermark) — the architectural constraint is
+  "fully local IT" per investor mandate. The agent does not spin up
+  Modal / RunPod / cloud GPU. If the brief truly requires one of
+  these, surface it and propose a local-fits alternative; do not
+  silently substitute.
+- **Closed-source commercial-only paths** without paid auth (Selects
+  MCP for multicam, paid sync libraries for distribution) — same
+  shape. Propose the local-fits alternative.
+- **Paid-API spending** without explicit user authorization — the
+  investor constraint is also "no paid APIs". `agent-install` and
+  `agent-pip-install` are free-software-only.
+- **Distribution-licensing for public deliverables** without license
+  proof on file at `manifest.<asset>.license_proof_path`.
+- **User explicitly forbade it** in `prompt.txt` or chat.
+
+For everything else — `missing`, `state-only`, `engine-not-wired` —
+the agent's response is to wire it. See `/docs/HARNESS_SELF_EXTENSION.md`.
 
 ## How to update this matrix
 
-Whenever a capability moves up the ladder, edit this file in the same
-commit as the code/test that produces the evidence. The reviewer
-sub-agent reads this file to verify production-ready claims.
+Whenever a capability moves up the ladder (`engine-not-wired` →
+`wired-unvalidated` → `production-ready`), edit this file in the SAME
+change as the code that produces the evidence. The reviewer sub-agent
+reads this file to verify production-ready claims. New capabilities
+get appended as new rows at the moment they're authored — don't wait
+for a "later cleanup pass."

@@ -1,0 +1,7 @@
+# Hooks the in-container agent authors live here. Bind-mounted from
+# host repo; survives container restart and image rebuild.
+#
+# To activate a hook after dropping it here, add it to the appropriate
+# chain in /root/.claude/settings.json (PreToolUse / Stop / etc).
+#
+# See /docs/HARNESS_SELF_EXTENSION.md.

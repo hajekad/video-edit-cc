@@ -109,6 +109,19 @@ RUN uv python install 3.12 && \
         pyannote.audio
 
 # ---------------------------------------------------------------------------
+# Project Python package manifest — agent-curated list of pip-installable
+# packages added on top of the ml-venv baseline. Mirror of
+# system-packages.txt but for /opt/ml-venv. The agent appends to this
+# file via `agent-pip-install <pkg>` so installs survive image rebuild.
+# ---------------------------------------------------------------------------
+COPY agents/python-packages.txt /tmp/python-packages.txt
+RUN pkgs=$(grep -vE '^\s*(#|$)' /tmp/python-packages.txt | tr '\n' ' ') && \
+    if [ -n "$pkgs" ]; then \
+        /opt/ml-venv/bin/uv pip install --no-cache $pkgs; \
+    fi && \
+    rm -f /tmp/python-packages.txt
+
+# ---------------------------------------------------------------------------
 # Pre-warm WhisperX large-v3 weights into a baked path. Reason: smoke test
 # discovered the first-run HuggingFace download stalled mid-stream (the
 # .incomplete file never grew), forcing the agent to recover by hand with
@@ -153,6 +166,40 @@ touch "$manifest"
 for pkg in "$@"; do
     if ! grep -qxF "$pkg" "$manifest"; then
         echo "$pkg" >> "$manifest"
+    fi
+done
+EOF
+
+# ---------------------------------------------------------------------------
+# agent-pip-install: the pip equivalent of agent-install. Installs into
+# /opt/ml-venv AND appends to /agents/python-packages.txt so the package
+# is bundled on next image rebuild. See /docs/HARNESS_SELF_EXTENSION.md.
+# ---------------------------------------------------------------------------
+RUN cat > /usr/local/bin/agent-pip-install <<'EOF' && chmod +x /usr/local/bin/agent-pip-install
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    echo "usage: agent-pip-install <pip-spec> [<pip-spec>...]" >&2
+    echo "  examples:" >&2
+    echo "    agent-pip-install playwright" >&2
+    echo "    agent-pip-install 'transformers>=4.40' accelerate" >&2
+    echo "  installs into /opt/ml-venv and appends to" >&2
+    echo "  /agents/python-packages.txt for next-image persistence." >&2
+    exit 2
+fi
+
+/opt/ml-venv/bin/uv pip install "$@"
+
+manifest=/agents/python-packages.txt
+if [ ! -d "$(dirname "$manifest")" ]; then
+    echo "warn: $(dirname "$manifest") not mounted; install not persisted" >&2
+    exit 0
+fi
+touch "$manifest"
+for spec in "$@"; do
+    if ! grep -qxF "$spec" "$manifest"; then
+        echo "$spec" >> "$manifest"
     fi
 done
 EOF

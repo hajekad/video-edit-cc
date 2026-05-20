@@ -16,27 +16,87 @@ official media kit. Used in the `/inventory` automatic-research pass.
 > skill, the agent reaches the official press page directly and saves
 > the URL alongside the asset for provenance.
 
-## Strict default behavior
+## Aggressive fetch workflow — try hard before falling through
 
-**Official sources only.** The agent tries, in order:
+The agent's job is to land the brand mark autonomously. Filing a
+Capability issue and dropping a scaffold is the LAST resort, not the
+second move. The full fetch chain is:
+
+### Step 1 — Resolve the press page
+
+Try in order until one returns HTTP 200 with content > 1 KB:
 
 1. `<brand-domain>/media`
 2. `<brand-domain>/press`
-3. `<brand-domain>/about/media`
-4. `<brand-domain>/en/media` (for non-English primary domains)
+3. `<brand-domain>/en/media` / `<brand-domain>/cs/media` (locale-aware)
+4. `<brand-domain>/about/media` / `<brand-domain>/about-the-company/media`
 5. `<brand-domain>/newsroom`
 6. `<brand-domain>/brand-guidelines`
-7. `<brand-domain>/about/brand`
-8. `<brand-parent-corp-domain>/...` for subsidiary brands (e.g.
-   `orlenunipetrol.cz/media` falls back to `orlen.pl/media`)
+7. `<brand-domain>/en/about-the-company/media/press-pack`
+8. `<brand-parent-corp-domain>/...` for subsidiary brands
 
-If none of those resolve, the agent looks for a press contact via the
-brand's `/contact` page and files a `Capability` issue (brand-press-page-not-found)
-rather than substituting a Google image grab.
+### Step 2 — Parse the resolved page
+
+Don't stop at "page loaded but no obvious download link." Modern
+corporate sites embed the brand mark inline. Extract candidate URLs
+with:
+
+```bash
+# Direct image asset references from the rendered HTML
+grep -oE 'src="[^"]+\.(svg|png|jpg)"' page.html | sort -u
+grep -oE 'href="[^"]+\.(svg|png|pdf|zip|ai)"' page.html | sort -u
+
+# Inline backgrounds in CSS / inline styles
+grep -oE 'background-image:\s*url\([^)]+\)' page.html
+```
+
+The brand mark is often hosted on the company's own CDN under a path
+like `/content/.../coreimg.png` or `/sites/default/files/brand/logo.svg`.
+That's NOT an aggregator — it's the brand's canonical CDN.
+
+### Step 3 — Pick the right candidate
+
+Heuristics to identify the canonical brand mark among the page's image
+references:
+
+- URL contains "logo", "brand", "wordmark", "mark", "lockup", or the
+  brand name itself
+- Image is reasonably small (< 200 KB) — full brand campaigns or hero
+  shots are typically larger
+- Image is square-ish or wider — letter-grid logos are typically not
+  tall portrait
+- Path is under the brand's own domain (not an aggregator)
+
+Pull 2-3 candidates with `curl`. Probe with `identify`. Pick the one
+whose visual matches "this is the brand mark" (square format with the
+mark, color matches brand guidelines if known).
+
+### Step 4 — Try the parent corporation if needed
+
+If the subsidiary (e.g. `orlenunipetrol.cz`) doesn't surface the
+canonical mark, try the parent (`orlen.pl`). For multinationals,
+also try `<brand>.com` regardless of the subsidiary's TLD.
+
+### Step 5 — ONLY now: dropin-scaffold
+
+If Steps 1-4 all fail (no resolvable press page, no parsed image
+candidates, no parent-corp source either), then:
+
+```bash
+/opt/claude-config/tools/dropin-scaffold "$SLUG" logo \
+  --sources "<all the URLs you tried>" \
+  --notes "Brand identified as <name>. Press-page fetch failed: <reason>."
+```
+
+Document in `docs/issues/brand-asset-fetch-failed.md` the SPECIFIC
+URLs tried and what each returned. Don't ship a vague "couldn't find
+the logo."
 
 **Never use Google Images, Wikipedia, Wikimedia Commons, or third-party
 logo aggregators** (logosearch, brandfetch, seeklogo, etc.) as the
 canonical source. These can carry outdated or unauthorized variants.
+The brand's own CDN — even when reached via parsing the press page's
+HTML — IS the canonical source.
 
 ## What to fetch
 

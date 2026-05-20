@@ -88,10 +88,26 @@ case "$STAGE" in
     ;& # fall through
 
   self-eval-passed)
-    [ -f "$PROJ/.claude/state/self-eval.verdict" ] || fail_with "self-eval.verdict missing"
-    if [ -f "$PROJ/.claude/state/self-eval.verdict" ]; then
-      head -1 "$PROJ/.claude/state/self-eval.verdict" | grep -qE '^(PASS|APPROVED)$' \
-        || fail_with "self-eval.verdict not PASS"
+    verdict_file="$PROJ/.claude/state/self-eval.verdict"
+    if [ ! -f "$verdict_file" ]; then
+      fail_with "self-eval.verdict missing — run /opt/claude-config/tools/self-eval $ID"
+    else
+      # First line: PASS required (agent can't write APPROVED freehand anymore)
+      head -1 "$verdict_file" | grep -qE '^PASS$' \
+        || fail_with "self-eval.verdict not PASS — review the JSON body's checks[] for failed items and fix each before re-running self-eval"
+      # Authenticity: must be authored by the canonical tool (agent
+      # can't hand-write a PASS without actually running the checks)
+      grep -q '"tool":[[:space:]]*"self-eval"' "$verdict_file" \
+        || fail_with "self-eval.verdict not authored by /opt/claude-config/tools/self-eval — re-run that tool, do not hand-write a verdict"
+      # Recency: must have been written after the last output mp4 modification
+      # (catches the "I ran self-eval then re-rendered with new gaps" loophole)
+      latest_output=$(find "$PROJ/output" /assets/*/output -maxdepth 1 -name "*.mp4" -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+      verdict_mtime=$(stat -c %Y "$verdict_file" 2>/dev/null || echo 0)
+      if [ -n "$latest_output" ]; then
+        # awk fp comparison — verdict must be NEWER than newest mp4
+        is_fresh=$(awk -v v="$verdict_mtime" -v o="$latest_output" 'BEGIN{print (v >= o) ? 1 : 0}')
+        [ "$is_fresh" = "1" ] || fail_with "self-eval.verdict is older than latest rendered mp4 — re-run self-eval after the most recent render"
+      fi
     fi
     ;& # fall through
 

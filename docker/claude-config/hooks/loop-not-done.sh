@@ -190,7 +190,7 @@ action_sentence() {
     render-preview)
       printf 'Good. Now focus on this: render /work/%s/edit/preview.mp4 at 720p via render.py with subtitles LAST (Hard Rule 1). Update manifest.stage=rendered.\n' "$id" ;;
     self-eval)
-      printf 'Good. Now focus on this: run timeline_view at every cut boundary (±1.5s) on the rendered output in /work/%s/edit/preview.mp4. Check for visual jumps, audio pops, hidden subtitles, overlay mis-alignment. Cap at 3 fix passes. Write the verdict to /work/%s/.claude/state/self-eval.verdict.\n' "$id" "$id" ;;
+      printf 'Good. Now focus on this: run /opt/claude-config/tools/self-eval %s. The tool produces a structured verdict comparing the deliverable against the brief (variant presence, ffprobe spec match, audio policy per variant, brand logo file present, required docs present, README has no self-documented gap markers). If the verdict is FAIL, read .claude/state/self-eval.verdict for the gap list and FIX each before re-running. You cannot advance to delivered until self-eval is PASS, the verdict is authored by the canonical tool, AND no output mp4 was modified after the verdict timestamp. DO NOT write the verdict by hand.\n' "$id" ;;
     deliver)
       printf 'Good. Now focus on this: render final /work/%s/edit/final.mp4 at delivery resolution, AND export buttercut NLE XML if the project specs that. Copy outputs into /assets/%s/output/. Update manifest.stage=delivered.\n' "$id" "$id" ;;
     *)

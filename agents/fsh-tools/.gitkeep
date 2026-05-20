@@ -1,0 +1,11 @@
+# Tools the in-container agent authors live here. Bind-mounted from
+# host repo; on PATH via seed.sh; survives container restart and image
+# rebuild because the directory is in git.
+#
+# Conventions:
+# - One executable per file (Python / bash / Ruby / etc; chmod +x).
+# - Name maps directly to the command users invoke (no extension).
+# - When you add a tool, append a row to /docs/SKILL_ROUTING.md.
+#
+# See /docs/HARNESS_SELF_EXTENSION.md for the full self-extension
+# doctrine.

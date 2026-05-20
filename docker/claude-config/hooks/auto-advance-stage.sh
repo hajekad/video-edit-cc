@@ -103,6 +103,26 @@ if [ "$new_rank" -gt "$prev_rank" ]; then
      '.stage = $s | .stage_advanced_by = ((.stage_advanced_by // []) + [{from: $p, to: $s, at: $t, by: "auto-advance-stage.sh"}])' \
      "$M" > "$M.tmp" && mv "$M.tmp" "$M"
   echo "auto-advance-stage: $prev_stage -> $new_stage" >&2
+
+  # On rendered → delivered (or any transition that reaches delivered),
+  # auto-stage /work/<slug>/output/ → /assets/<id>/output/ if not already
+  # there. Smoke #3 left 14 mp4s sitting in /work/<slug>/output/ because
+  # the agent never copied them over.
+  if [ "$new_stage" = "delivered" ]; then
+    src_dir="$PROJ/output"
+    if [ -d "$src_dir" ] && [ -d "$asset_out" ] || mkdir -p "$asset_out" 2>/dev/null; then
+      # Only stage if there's something to stage AND the asset dir is empty-or-stale
+      if [ -n "$(ls -A "$src_dir" 2>/dev/null)" ]; then
+        # Use rsync to be idempotent (skips identical files via checksum)
+        if command -v rsync >/dev/null 2>&1; then
+          rsync -a --update "$src_dir"/ "$asset_out"/ 2>&1 | head -3 >&2
+        else
+          cp -ru "$src_dir"/. "$asset_out"/ 2>&1 | head -3 >&2
+        fi
+        echo "auto-stage: $src_dir/ -> $asset_out/" >&2
+      fi
+    fi
+  fi
 fi
 
 exit 0

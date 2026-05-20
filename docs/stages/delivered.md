@@ -171,22 +171,41 @@ Defaults (overridable in `manifest.brand.bug`):
 - Eagle + wordmark together — never separate (per ORLEN-style brand
   source notes; same rule for any brand lockup)
 
-Implementation: bake the overlay during the base-render step. PyrolyzaKveten
-Q2-2026 has the canonical implementation at
-`/work/q2-2026-pyrolyzakveten/edit/render_cut.py` (`add_logo_bug` helper +
-its invocation from `render_cut`).
+Implementation: bake a single animated logo overlay during the base-render
+step. The animation is the close-card brand-transition (see below) — not
+just a static bug. PyrolyzaKveten Q2-2026 has the canonical implementation
+at `/work/q2-2026-pyrolyzakveten/edit/render_cut.py`
+(`add_logo_with_close_animation` helper).
 
-Close cards: when `manifest.brand.logo_path` is set, the close card
-replaces the typographic ORLEN wordmark with the actual lockup PNG
-overlaid at center (≈36% width). The brand source-notes typically forbid
-typographic-only wordmarks because they separate the wordmark from the
-brand symbol.
+**Close-card brand-transition pattern (REQUIRED when both a logo dropin
+AND a close card exist in the cut):** the corner bug must EXPAND and SLIDE
+into the close-card lockup position as the close card fades in. NEVER
+ship a frame with both the small top-left bug AND a separate centered
+close-card logo at the same time — that reads as a double-logo bug to
+brand teams and erodes the lockup's authority.
 
-**Why this exists:** Reference case — smoke #3 PyrolyzaKveten Round 2.
-The agent removed a clashing typographic ORLEN overlay top-left after
-user feedback, but did NOT replace it with the dropped logo, so every
-cut shipped without the brand bug. Brand teams expect the logo on every
-frame of every cut, not "when convenient."
+Default animation:
+- t < (close_card_start - 0.5s): logo holds as small bug at top-left
+- (close_card_start - 0.5s) ≤ t ≤ (close_card_start + 0.1s): scale and
+  position interpolate linearly toward the close-card lockup position
+- t > (close_card_start + 0.1s): logo holds at close-card position
+  (≈32% width, centered horizontally, top-third vertically)
+
+The close-card fragment renders WITHOUT a separately-overlaid logo — the
+animated overlay delivers the logo there. Headline / subhead / CTA on the
+close card are positioned BELOW the logo's landing zone (typically subhead
+at H*0.32, CZ headline at H*0.43, CTA at H*0.85) to leave the top third
+clear.
+
+If the cut has NO close card (e.g. an outro-less B-roll loop), the logo
+stays as the small top-left bug throughout — no transition needed.
+
+**Why this exists:** Reference case — smoke #3 PyrolyzaKveten Round 3.
+Earlier rounds shipped (a) no logo at all, then (b) a typographic ORLEN
+wordmark top-left that clashed with in-frame coverall patches, then (c) a
+small-bug + big-center double-logo on close cards. The user-facing rule:
+one logo on screen at any moment, with a single graceful transition into
+the close-card position.
 
 **If no dropin is present:** ship the cuts without a corner bug (do NOT
 fall back to a typographic wordmark — clashes with in-frame coverall
@@ -242,6 +261,11 @@ returns nothing, and the agent goes idle.
   Every project gets the `<slug>_delivery.zip` with per-video folders
   + publish_instructions.txt — even n=1. Brand/marketing teams airdrop
   the folder to a phone and expect instructions adjacent to the file.
+- **Double-logo on the close card (small bug + big center at once).** § 4c
+  mandates a single graceful expand-and-slide transition: the corner bug
+  morphs into the close-card lockup as the close card opens. Two logos
+  visible simultaneously reads as a brand-design error. Render-side fix is
+  a single animated overlay pass — never two independently-placed logos.
 - **Shipping only INTERNAL_REVIEW + CLEAN_FOR_UI_MUSIC without NO_SUBS.**
   Three variants per cut, always. The NO_SUBS version is the difference
   between a cut that can be repurposed (re-subbed for another language,

@@ -1,5 +1,10 @@
-# Agent scratch — per-project workspaces. Each /work/<id>/ is its own
-# git repo created by docker/claude-config/scaffold-project.sh.
+# Agent scratch. Top-level ignores this entirely.
+#
+# work/ is its own independent git repo, and each /work/<id>/ inside it
+# is also its own git repo (scaffolded by docker/claude-config/scaffold-project.sh).
+# The reason work/ is a repo at all is empirical — long-running Claude
+# agents behave noticeably better in cwd's that have a .git/ around
+# them. Acts as a behavioral anchor. No upstream, never pushed.
 work/
 
 # User IO — videos in, deliverables out. Large binary; gitignored.

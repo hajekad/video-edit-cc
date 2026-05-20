@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""fsh-context — FotoStudioH project/issue/capability lookup CLI.
+
+Equivalent of nix-zeneca's `nixfactor-context` Rust MCP, kept lighter
+as a plain Python CLI so the agent invokes it via Bash. No MCP server
+overhead; the Bash tool is already universal.
+
+Usage:
+  fsh-context project-status [--id <id>|--all]
+  fsh-context issue-next <project-id>
+  fsh-context capability-status [<capability-name>]
+  fsh-context manifest-get <id> <jq-path>     (e.g. .stage, .strategy.approved)
+  fsh-context edl-validate <id>
+  fsh-context active                          (print most-recently-modified non-delivered project id)
+
+Exit codes:
+  0   success
+  1   user error (bad args, missing files)
+  2   query returned no result (e.g. no active project)
+  3   validation failure (gates didn't pass)
+"""
+
+from __future__ import annotations
+import argparse
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+from typing import Any
+
+
+WORK_ROOT = pathlib.Path(os.environ.get("FSH_WORK_ROOT", "/work"))
+ASSETS_ROOT = pathlib.Path(os.environ.get("FSH_ASSETS_ROOT", "/assets"))
+DOCS_ROOT = pathlib.Path(os.environ.get("FSH_DOCS_ROOT", "/docs"))
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def project_dir(pid: str) -> pathlib.Path:
+    p = WORK_ROOT / pid
+    if not p.is_dir():
+        die(f"no such project: {p}", 1)
+    return p
+
+
+def load_manifest(pid: str) -> dict[str, Any]:
+    m = project_dir(pid) / "manifest.json"
+    if not m.is_file():
+        die(f"missing manifest.json in {m.parent}", 1)
+    try:
+        return json.loads(m.read_text())
+    except json.JSONDecodeError as e:
+        die(f"manifest.json invalid: {e}", 1)
+    return {}  # unreachable
+
+
+def list_projects() -> list[pathlib.Path]:
+    if not WORK_ROOT.is_dir():
+        return []
+    return sorted(
+        (p for p in WORK_ROOT.iterdir() if p.is_dir() and not p.name.startswith(".")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def open_issues(issues_dir: pathlib.Path) -> list[pathlib.Path]:
+    if not issues_dir.is_dir():
+        return []
+    out = []
+    for f in sorted(issues_dir.glob("*.md")):
+        text = f.read_text(errors="replace")
+        if re.search(r"^status: (Open|Active|Review)$", text, flags=re.MULTILINE):
+            out.append(f)
+    return out
+
+
+def issue_frontmatter(path: pathlib.Path) -> dict[str, str]:
+    """Cheap frontmatter parser — string values only, no nested structures."""
+    out: dict[str, str] = {}
+    in_fm = False
+    for line in path.read_text(errors="replace").splitlines():
+        if line == "---":
+            if in_fm:
+                break
+            in_fm = True
+            continue
+        if not in_fm:
+            continue
+        m = re.match(r"^([a-z_]+):\s*(.*)$", line)
+        if m:
+            out[m.group(1)] = m.group(2)
+    return out
+
+
+def cmd_active(args: argparse.Namespace) -> int:
+    for p in list_projects():
+        manifest = p / "manifest.json"
+        if manifest.is_file():
+            try:
+                stage = json.loads(manifest.read_text()).get("stage", "input-received")
+            except json.JSONDecodeError:
+                stage = "input-received"
+            if stage != "delivered":
+                print(p.name)
+                return 0
+        else:
+            # No manifest yet → counts as "active, needs scaffolding"
+            print(p.name)
+            return 0
+    return 2  # no active project
+
+
+def cmd_project_status(args: argparse.Namespace) -> int:
+    if args.all:
+        pids = [p.name for p in list_projects()]
+    elif args.id:
+        pids = [args.id]
+    else:
+        # Default: active project
+        for p in list_projects():
+            manifest = p / "manifest.json"
+            if manifest.is_file():
+                stage = json.loads(manifest.read_text()).get("stage", "input-received")
+                if stage != "delivered":
+                    pids = [p.name]
+                    break
+        else:
+            print("no active projects", file=sys.stderr)
+            return 2
+
+    for pid in pids:
+        m = load_manifest(pid)
+        proj = project_dir(pid)
+        issues = open_issues(proj / "docs" / "issues")
+        ranges = 0
+        edl = proj / "edit" / "edl.json"
+        if edl.is_file():
+            try:
+                ranges = len(json.loads(edl.read_text()).get("ranges", []))
+            except json.JSONDecodeError:
+                ranges = -1
+        n_inputs = len(m.get("inputs", []))
+        approved = m.get("strategy", {}).get("approved", False)
+        preview = (proj / "edit" / "preview.mp4").is_file()
+        final = (proj / "edit" / "final.mp4").is_file()
+        eval_v = proj / ".claude" / "state" / "self-eval.verdict"
+        eval_state = "not run"
+        if eval_v.is_file():
+            first_line = eval_v.read_text().splitlines()[:1]
+            eval_state = first_line[0] if first_line else "empty"
+
+        print(f"project:   {pid}")
+        print(f"stage:     {m.get('stage', '?')}")
+        print(f"inputs:    {n_inputs}")
+        print(f"strategy:  {'approved' if approved else 'pending'}")
+        print(f"edl:       {ranges} range(s)" if ranges >= 0 else "edl:       invalid JSON")
+        print(f"render:    preview={'yes' if preview else 'no'}  final={'yes' if final else 'no'}")
+        print(f"self-eval: {eval_state}")
+        print(f"issues:    {len(issues)} open")
+        if args.all and pid != pids[-1]:
+            print()
+    return 0
+
+
+def cmd_issue_next(args: argparse.Namespace) -> int:
+    proj = project_dir(args.project_id)
+    issues = open_issues(proj / "docs" / "issues")
+    if not issues:
+        return 2
+
+    # Picker ladder mirrors nix-zeneca: Active first, then P0/P1 by type.
+    def matches(fm: dict[str, str], status: str = "", priority: str = "", typ: str = "") -> bool:
+        if "blocked_by" in fm and re.search(r"\[\s*[1-9]", fm["blocked_by"]):
+            return False
+        if status and fm.get("status") != status:
+            return False
+        if priority and fm.get("priority") != priority:
+            return False
+        if typ and fm.get("type") != typ:
+            return False
+        return True
+
+    parsed = [(f, issue_frontmatter(f)) for f in issues]
+
+    ladders = [
+        {"status": "Active"},
+        {"priority": "P0", "typ": "Bug"},
+        {"priority": "P0", "typ": "Cut"},
+        {"priority": "P0", "typ": "Strategy"},
+        {"priority": "P0", "typ": "Render"},
+        {"priority": "P1", "typ": "Bug"},
+        {"priority": "P1"},
+        {"typ": "Test"},
+        {"typ": "Audit"},
+        {"typ": "Decision"},
+        {"typ": "Refactor"},
+        {},  # any open
+    ]
+    for spec in ladders:
+        for f, fm in parsed:
+            if matches(fm, **spec):
+                print(f.name)
+                return 0
+    return 2
+
+
+def cmd_capability_status(args: argparse.Namespace) -> int:
+    matrix = DOCS_ROOT / "CAPABILITY_MATRIX.md"
+    if not matrix.is_file():
+        die(f"missing {matrix}", 1)
+
+    txt = matrix.read_text()
+    # Parse the markdown table rows of form: | Capability | Stage | ... |
+    rows = []
+    for line in txt.splitlines():
+        m = re.match(r"^\|\s*([^|]+?)\s*\|\s*(missing|state-only|engine-not-wired|wired-unvalidated|production-ready)\s*\|", line)
+        if m:
+            rows.append((m.group(1).strip(), m.group(2)))
+
+    if args.name:
+        q = args.name.lower()
+        hits = [(c, s) for c, s in rows if q in c.lower()]
+        if not hits:
+            print(f"no capability matching '{args.name}'", file=sys.stderr)
+            return 2
+        for c, s in hits:
+            print(f"{s:22s}  {c}")
+    else:
+        # Group by stage
+        order = ["production-ready", "wired-unvalidated", "engine-not-wired", "state-only", "missing"]
+        by_stage: dict[str, list[str]] = {k: [] for k in order}
+        for c, s in rows:
+            by_stage.setdefault(s, []).append(c)
+        for stage in order:
+            caps = by_stage.get(stage, [])
+            if caps:
+                print(f"\n[{stage}]  ({len(caps)})")
+                for c in caps:
+                    print(f"  - {c}")
+    return 0
+
+
+def cmd_manifest_get(args: argparse.Namespace) -> int:
+    m = load_manifest(args.project_id)
+    # Use jq for the key lookup since the agent passes jq-style paths.
+    try:
+        out = subprocess.check_output(
+            ["jq", "-r", args.jq_path],
+            input=json.dumps(m).encode(),
+            stderr=subprocess.DEVNULL,
+        )
+        sys.stdout.buffer.write(out)
+    except FileNotFoundError:
+        die("jq not installed", 1)
+    except subprocess.CalledProcessError as e:
+        die(f"jq error: {e}", 1)
+    return 0
+
+
+def cmd_edl_validate(args: argparse.Namespace) -> int:
+    proj = project_dir(args.project_id)
+    edl_path = proj / "edit" / "edl.json"
+    if not edl_path.is_file():
+        die(f"missing {edl_path}", 1)
+    try:
+        edl = json.loads(edl_path.read_text())
+    except json.JSONDecodeError as e:
+        die(f"edl.json invalid JSON: {e}", 3)
+
+    failures: list[str] = []
+
+    if "ranges" not in edl or not isinstance(edl["ranges"], list):
+        failures.append("missing or non-list 'ranges'")
+    else:
+        for i, r in enumerate(edl["ranges"]):
+            for key in ("source", "start", "end"):
+                if key not in r:
+                    failures.append(f"range[{i}] missing '{key}'")
+            if "start" in r and "end" in r:
+                try:
+                    if float(r["end"]) <= float(r["start"]):
+                        failures.append(f"range[{i}] end <= start")
+                except (TypeError, ValueError):
+                    failures.append(f"range[{i}] non-numeric start/end")
+
+    if "sources" not in edl:
+        failures.append("missing 'sources' map")
+    elif "ranges" in edl and isinstance(edl["ranges"], list):
+        srcs = set(edl["sources"].keys()) if isinstance(edl.get("sources"), dict) else set()
+        for i, r in enumerate(edl["ranges"]):
+            if "source" in r and r["source"] not in srcs:
+                failures.append(f"range[{i}] source '{r['source']}' not in sources map")
+
+    # Total duration plausibility check.
+    expected = edl.get("total_duration_s")
+    if expected is not None and "ranges" in edl and isinstance(edl["ranges"], list):
+        total = sum(
+            float(r["end"]) - float(r["start"])
+            for r in edl["ranges"]
+            if "start" in r and "end" in r
+        )
+        if abs(total - float(expected)) > 0.5:
+            failures.append(f"total_duration_s ({expected}) differs from sum-of-ranges ({total:.2f})")
+
+    if failures:
+        print(f"edl validation: {len(failures)} failure(s)", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
+        return 3
+    print(f"edl validation: OK ({len(edl.get('ranges', []))} range(s))")
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="fsh-context", description=__doc__.splitlines()[0] if __doc__ else "")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sp = sub.add_parser("active")
+    sp.set_defaults(func=cmd_active)
+
+    sp = sub.add_parser("project-status")
+    sp.add_argument("--id")
+    sp.add_argument("--all", action="store_true")
+    sp.set_defaults(func=cmd_project_status)
+
+    sp = sub.add_parser("issue-next")
+    sp.add_argument("project_id")
+    sp.set_defaults(func=cmd_issue_next)
+
+    sp = sub.add_parser("capability-status")
+    sp.add_argument("name", nargs="?")
+    sp.set_defaults(func=cmd_capability_status)
+
+    sp = sub.add_parser("manifest-get")
+    sp.add_argument("project_id")
+    sp.add_argument("jq_path")
+    sp.set_defaults(func=cmd_manifest_get)
+
+    sp = sub.add_parser("edl-validate")
+    sp.add_argument("project_id")
+    sp.set_defaults(func=cmd_edl_validate)
+
+    args = p.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

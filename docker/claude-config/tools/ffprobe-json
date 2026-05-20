@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# ffprobe-json — agent-friendly ffprobe wrapper. Returns flat JSON with the
+# fields the pipeline actually consumes (duration, width, height, fps,
+# codec, audio_sample_rate, n_streams).
+#
+# Usage:
+#   ffprobe-json <video>
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "usage: ffprobe-json <video>" >&2
+  exit 2
+fi
+
+VIDEO="$1"
+[ -f "$VIDEO" ] || { echo "no such file: $VIDEO" >&2; exit 1; }
+
+ffprobe -v error -print_format json -show_format -show_streams "$VIDEO" | jq '
+  {
+    path: .format.filename,
+    duration_s: (.format.duration | tonumber? // null),
+    size_bytes: (.format.size | tonumber? // null),
+    bitrate_bps: (.format.bit_rate | tonumber? // null),
+    n_streams: (.streams | length),
+    video: (
+      .streams
+      | map(select(.codec_type == "video"))
+      | .[0]
+      | if . then {
+          codec: .codec_name,
+          width: .width,
+          height: .height,
+          fps: (
+            (.r_frame_rate // "0/1")
+            | split("/")
+            | (.[0] | tonumber) / ((.[1] | tonumber) | if . == 0 then 1 else . end)
+          ),
+          pix_fmt: .pix_fmt
+        } else null end
+    ),
+    audio: (
+      .streams
+      | map(select(.codec_type == "audio"))
+      | .[0]
+      | if . then {
+          codec: .codec_name,
+          sample_rate: (.sample_rate | tonumber? // null),
+          channels: .channels
+        } else null end
+    )
+  }
+'

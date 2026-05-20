@@ -1,0 +1,19 @@
+# Agent scratch — per-project workspaces. Each /work/<id>/ is its own
+# git repo created by docker/claude-config/scaffold-project.sh.
+work/
+
+# User IO — videos in, deliverables out. Large binary; gitignored.
+assets/
+
+# External reference material — saved articles + arXiv PDF.
+# Not our IP; not version-controlled here.
+reference/
+
+# The agents/ dir is its own git repo, managed independently.
+agents/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~

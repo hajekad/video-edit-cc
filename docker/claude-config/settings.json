@@ -1,0 +1,63 @@
+{
+  "cleanupPeriodDays": 180,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/root/.claude/hooks/issue-state-review.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/root/.claude/hooks/auto-commit.sh"
+          },
+          {
+            "type": "command",
+            "command": "/root/.claude/hooks/loop-not-done.sh"
+          },
+          {
+            "type": "command",
+            "command": "/root/.claude/hooks/notify-stop.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "/root/.claude/statusline.sh",
+    "refreshInterval": 30
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  },
+  "spinnerTipsEnabled": false,
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": ["Working"]
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "xhigh",
+  "autoCompactWindow": 1000000,
+  "showThinkingSummaries": true,
+  "theme": "dark",
+  "fileCheckpointingEnabled": true,
+  "showTurnDuration": true,
+  "skipAutoPermissionPrompt": true,
+  "permissions": {
+    "defaultMode": "auto"
+  }
+}

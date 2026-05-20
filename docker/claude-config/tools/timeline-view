@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# timeline-view — agent-friendly wrapper over video-use/helpers/timeline_view.py.
+# Returns a PNG (filmstrip + waveform + word labels) for a time range.
+#
+# Usage:
+#   timeline-view <video> <start_s> <end_s> [--out <path>]
+#
+# Without --out, writes to /tmp/timeline-<basename>-<start>-<end>.png and
+# prints the path. The agent reads the PNG as an image via the Read tool.
+
+set -euo pipefail
+
+if [ $# -lt 3 ]; then
+  echo "usage: timeline-view <video> <start_s> <end_s> [--out <path>]" >&2
+  exit 2
+fi
+
+VIDEO="$1"; START="$2"; END="$3"; shift 3
+OUT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) OUT="$2"; shift 2 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -f "$VIDEO" ] || { echo "no such file: $VIDEO" >&2; exit 1; }
+
+if [ -z "$OUT" ]; then
+  base=$(basename "$VIDEO" | sed 's/\.[^.]*$//')
+  OUT="/tmp/timeline-${base}-${START}-${END}.png"
+fi
+
+# The helper lives in agents/video-use; resolve dynamically.
+HELPER="/agents/video-use/helpers/timeline_view.py"
+[ -f "$HELPER" ] || { echo "helper missing: $HELPER" >&2; exit 1; }
+
+# Run inside the baked ML venv (has librosa, matplotlib, pillow, numpy).
+/opt/ml-venv/bin/python "$HELPER" "$VIDEO" "$START" "$END" --out "$OUT" >&2
+
+printf '%s\n' "$OUT"

@@ -1,0 +1,37 @@
+services:
+  fotostudioh-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: fotostudioh-agent
+    restart: unless-stopped
+    working_dir: /work
+    volumes:
+      - ../work:/work
+      - ../agents:/agents
+      - ../assets:/assets
+      - ../docs:/docs                   # spec + system-level issues (writable — agent files cross-project + capability-matrix issues here)
+      - ../reference:/reference:ro      # articles + arXiv PDF — agent context, read-only
+      - claude-config:/root/.claude
+      - pacman-cache:/var/cache/pacman/pkg
+      - hf-models:/root/.cache          # whisper + huggingface model cache (~3-10 GB)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - API_TIMEOUT_MS=12000000          # 200 minutes — helps with Lite plan delays
+      - CLAUDE_PROJECT_LABEL=FotoStudioH
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    tty: true
+    stdin_open: true
+
+volumes:
+  claude-config:
+  pacman-cache:
+  hf-models:

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# cut-boundary — inspect a cut boundary in a rendered output for self-eval.
+# Wraps timeline-view with the standard ±1.5s window.
+#
+# Usage:
+#   cut-boundary <rendered-video> <boundary_t> [--out <path>]
+
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+  echo "usage: cut-boundary <rendered-video> <boundary_t> [--out <path>]" >&2
+  exit 2
+fi
+
+VIDEO="$1"; T="$2"; shift 2
+
+START=$(awk -v t="$T" 'BEGIN{ s=t-1.5; if (s<0) s=0; print s }')
+END=$(awk -v t="$T" 'BEGIN{ print t+1.5 }')
+
+exec /opt/claude-config/tools/timeline-view "$VIDEO" "$START" "$END" "$@"

@@ -1,0 +1,66 @@
+PROPRIETARY LICENSE — FotoStudioH
+
+Copyright (c) 2026 Adam Hájek. All Rights Reserved.
+
+This software, including all source code, configuration, documentation,
+prompts, schemas, and any other original content under this repository
+(collectively, the "Work"), is proprietary and confidential to the
+copyright holder.
+
+Unauthorized copying, modification, reverse engineering, distribution,
+publication, public display, sublicensing, or commercial use of the
+Work, in whole or in part, by any means and in any medium, is strictly
+prohibited without the prior express written permission of the
+copyright holder.
+
+The Work is provided to its authorized users on an "as-is" basis. No
+right or license is granted by implication, estoppel, or otherwise.
+
+THIRD-PARTY COMPONENTS
+
+The Work integrates with third-party software referenced by git
+submodules under `agents/`, and at runtime calls third-party tools
+installed by `docker/claude-config/scaffold-project.sh` and listed in
+`agents/system-packages.txt`. Each third-party component remains
+governed by its own upstream license; no claim of ownership over
+third-party content is made by this license.
+
+In particular:
+
+  - `agents/buttercut/` is licensed by its authors under PolyForm
+    Noncommercial 1.0.0 with a Commercial Output exception. The Work
+    uses buttercut to produce video outputs ("Commercial Output") only
+    in compliance with that exception. The Work does not bundle,
+    redistribute, host, or sell buttercut itself as a commercial
+    product, and the copyright holder asserts no rights over the
+    buttercut tool.
+
+  - All other Apache-2.0, MIT, BSD, ISC, MPL, and similarly licensed
+    submodules are used in compliance with their notice and attribution
+    requirements. Their LICENSE files are preserved within their
+    respective submodule directories.
+
+  - Submodules carrying copyleft licenses (GPL / AGPL / MPL family) are
+    invoked at runtime as separate processes or as user-installed
+    tools, not statically linked or redistributed as part of the Work.
+    Their license boundaries are respected accordingly.
+
+  - Where a submodule declares no explicit license, the Work treats it
+    as "all rights reserved" by its authors and uses it only under
+    fair-use research and personal-evaluation purposes pending
+    clarification from the upstream authors.
+
+NO WARRANTY
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR
+OTHER DEALINGS IN THE WORK.
+
+CONTACT
+
+For questions, permission requests, or commercial licensing inquiries,
+contact the copyright holder.

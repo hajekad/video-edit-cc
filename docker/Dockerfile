@@ -4,6 +4,18 @@
 FROM --platform=linux/amd64 archlinux:base-devel
 
 # ---------------------------------------------------------------------------
+# Pacman 7's sandbox uses seccomp syscall filtering which fails under
+# Rosetta 2 / qemu emulation (error: "error restricting syscalls via
+# seccomp: 22 / switching to sandbox user 'alpm' failed"). Disable the
+# sandbox before any pacman command runs so the build works on Apple
+# Silicon. Comment out DownloadUser too — same root cause.
+# Native linux/amd64 hosts also work fine without the sandbox; it's only
+# a hardening layer for installs.
+# ---------------------------------------------------------------------------
+RUN echo "DisableSandbox" >> /etc/pacman.conf && \
+    sed -i 's/^DownloadUser/#DownloadUser/' /etc/pacman.conf
+
+# ---------------------------------------------------------------------------
 # Core system + media baseline (one layer, one cache flush)
 #
 #   git curl wget jq procps-ng sudo libnotify — dev / process / notify

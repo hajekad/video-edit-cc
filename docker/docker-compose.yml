@@ -1,5 +1,9 @@
 services:
   fotostudioh-agent:
+    # Arch Linux only ships amd64 manifests — force the platform so Apple
+    # Silicon hosts build/run via Rosetta 2 emulation. Native linux/amd64
+    # hosts treat this as a no-op.
+    platform: linux/amd64
     build:
       context: ..
       dockerfile: docker/Dockerfile

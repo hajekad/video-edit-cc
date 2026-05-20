@@ -1,4 +1,7 @@
-FROM archlinux:base-devel
+# Arch Linux is officially x86_64-only — the registry has no arm64 manifest.
+# Pin the platform so Apple Silicon (and other arm64 Docker hosts) build via
+# Rosetta 2 / qemu emulation. On native linux/amd64 this is a no-op.
+FROM --platform=linux/amd64 archlinux:base-devel
 
 # ---------------------------------------------------------------------------
 # Core system + media baseline (one layer, one cache flush)

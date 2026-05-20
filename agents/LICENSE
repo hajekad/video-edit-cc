@@ -1,0 +1,43 @@
+PROPRIETARY LICENSE — FotoStudioH (agents)
+
+Copyright (c) 2026 Adam Hájek. All Rights Reserved.
+
+This directory ("agents/") holds two distinct classes of content:
+
+  1. ORIGINAL WORK — files authored by the copyright holder, including
+     but not limited to CLAUDE.md, AGENTS.md, system-packages.txt,
+     this LICENSE file, the .gitignore file, .gitmodules, and any
+     future fsh-*/ skill directories. All such files are proprietary
+     and confidential. Unauthorized copying, modification, reverse
+     engineering, distribution, publication, public display,
+     sublicensing, or commercial use is strictly prohibited without
+     the prior express written permission of the copyright holder.
+
+  2. THIRD-PARTY SUBMODULES — independent git repositories referenced
+     by .gitmodules. Each remains governed by its own upstream
+     license; see each submodule's own LICENSE file. No claim of
+     ownership over third-party content is made by this license.
+
+In particular:
+
+  - `buttercut/` is licensed by its authors under PolyForm Noncommercial
+    1.0.0 with a Commercial Output exception. The Work uses buttercut
+    only in compliance with that exception (commercial use of video
+    outputs is permitted; commercial use of the buttercut tool itself
+    is not). No part of buttercut is incorporated into the proprietary
+    portion of this Work.
+
+  - All Apache-2.0, MIT, BSD, ISC, MPL, and similarly licensed
+    submodules retain their notice + attribution requirements.
+
+  - GPL / AGPL / MPL-family components are invoked at runtime as
+    separate processes or as user-installed tools, never statically
+    linked or redistributed.
+
+  - Submodules with no declared license are used under fair-use
+    research and personal-evaluation only.
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS IN THE WORK.

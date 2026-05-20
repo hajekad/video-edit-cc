@@ -1,0 +1,191 @@
+# Demographic / audience → music criteria mapping.
+# Loaded by agents/fsh-music-mood-bridge/SKILL.md.
+#
+# Living table. Add personas as the agent encounters new audience
+# categories. The keys are descriptive strings the marketing skill emits;
+# the values are search specs the fsh-royalty-free-music aggregator
+# consumes.
+#
+# Genre vocabulary aligns with Essentia discogs-effnet 400-class +
+# common royalty-free library tags. BPM, era, energy, valence are
+# inclusive ranges. `vocal`: optional | instrumental_preferred |
+# instrumental_only. `trend_source`: tiktok_creative_center | billboard
+# | none.
+
+"Gen-Z TikTok fitness creators":
+  genres: [hyperpop, trap, drill, jersey-club, dance-pop, brazilian-funk]
+  bpm: [120, 160]
+  era: [2022, 2026]
+  energy: [0.75, 1.0]
+  valence: [0.5, 1.0]
+  vocal: optional
+  duration_target_s: [15, 60]
+  trend_source: tiktok_creative_center
+  notes: "Hook must land in 1-3s. Lyric-free preferred for safety."
+
+"Gen-Z TikTok aesthetic / lifestyle":
+  genres: [phonk, lo-fi, hyperpop, indie-pop, alt-rnb]
+  bpm: [85, 130]
+  era: [2020, 2026]
+  energy: [0.55, 0.85]
+  valence: [0.4, 0.9]
+  vocal: optional
+  duration_target_s: [15, 60]
+  trend_source: tiktok_creative_center
+
+"Millennial professional creators on YouTube":
+  genres: [indie-folk, corporate-uplifting, ambient-electronic, chillhop, neo-soul]
+  bpm: [95, 125]
+  era: [2015, 2026]
+  energy: [0.5, 0.8]
+  valence: [0.55, 0.85]
+  vocal: instrumental_preferred
+  duration_target_s: [60, 300]
+  trend_source: none
+
+"B2B SaaS execs on LinkedIn":
+  genres: [corporate-uplifting, ambient-electronic, neo-classical, indie-folk]
+  bpm: [90, 120]
+  era: [2015, 2026]
+  energy: [0.4, 0.7]
+  valence: [0.6, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [30, 180]
+  trend_source: none
+  notes: "Avoid drops, vocals, anything 'club'. Default to gentle pulse-driven indie."
+
+"B2B enterprise (Fortune 500 stakeholders)":
+  genres: [neo-classical, ambient-electronic, contemporary-orchestral]
+  bpm: [60, 100]
+  era: [2010, 2026]
+  energy: [0.3, 0.6]
+  valence: [0.5, 0.85]
+  vocal: instrumental_only
+  duration_target_s: [60, 240]
+  trend_source: none
+
+"Cinematic brand pieces (luxury / lifestyle)":
+  genres: [neo-classical, ambient-electronic, post-rock, contemporary-orchestral]
+  bpm: [60, 100]
+  era: [2010, 2026]
+  energy: [0.35, 0.75]
+  valence: [0.4, 0.85]
+  vocal: instrumental_preferred
+  duration_target_s: [60, 240]
+  trend_source: none
+
+"Family / kids content (4-10 year olds)":
+  genres: [acoustic-pop, light-orchestral, ukulele, children-friendly-indie]
+  bpm: [100, 130]
+  era: [2015, 2026]
+  energy: [0.55, 0.85]
+  valence: [0.7, 1.0]
+  vocal: optional
+  duration_target_s: [30, 240]
+  trend_source: none
+  notes: "NO minor keys with energy <0.5. Avoid sudden loudness changes."
+
+"Wedding ceremony":
+  genres: [neo-classical, acoustic-folk, instrumental-romantic, contemporary-orchestral]
+  bpm: [55, 90]
+  era: [2010, 2026]
+  energy: [0.2, 0.5]
+  valence: [0.6, 0.95]
+  vocal: instrumental_only
+  duration_target_s: [120, 480]
+  trend_source: none
+  notes: "Match key to processional/recessional cultural conventions."
+
+"Wedding reception montage":
+  genres: [dance-pop, indie-rock, latin-pop, motown-revival]
+  bpm: [110, 145]
+  era: [1980, 2026]
+  energy: [0.65, 0.95]
+  valence: [0.7, 1.0]
+  vocal: optional
+  duration_target_s: [60, 180]
+  trend_source: billboard
+
+"Documentary feature (intimate / character-driven)":
+  genres: [neo-classical, ambient-electronic, post-rock, minimalist-piano]
+  bpm: [50, 90]
+  era: [2000, 2026]
+  energy: [0.25, 0.65]
+  valence: [0.3, 0.8]
+  vocal: instrumental_only
+  duration_target_s: [60, 600]
+  trend_source: none
+  notes: "Be willing to leave NO music. Pearlman: 'the hold is where the work is.'"
+
+"Documentary investigative (urgency)":
+  genres: [ambient-tense, score-suspense, minimalist-percussion]
+  bpm: [60, 110]
+  era: [2000, 2026]
+  energy: [0.4, 0.85]
+  valence: [0.2, 0.6]
+  vocal: instrumental_only
+  duration_target_s: [60, 480]
+  trend_source: none
+
+"Corporate explainer / animated B2B":
+  genres: [corporate-uplifting, electronic-pulse, indie-pop-instrumental]
+  bpm: [100, 130]
+  era: [2015, 2026]
+  energy: [0.55, 0.85]
+  valence: [0.65, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [30, 180]
+  trend_source: none
+  notes: "Kinetic typography pairs well. Avoid drum loops; prefer pulsing synths."
+
+"Sports / action / highlights":
+  genres: [trap, electronic-action, rock-anthemic, drum-and-bass]
+  bpm: [130, 175]
+  era: [2018, 2026]
+  energy: [0.85, 1.0]
+  valence: [0.55, 0.95]
+  vocal: optional
+  duration_target_s: [30, 180]
+  trend_source: tiktok_creative_center
+
+"Real estate / property tour":
+  genres: [chillhop, lounge-electronic, acoustic-folk, jazz-piano]
+  bpm: [85, 115]
+  era: [2010, 2026]
+  energy: [0.4, 0.7]
+  valence: [0.65, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [60, 180]
+  trend_source: none
+
+"Travel / lifestyle vlog":
+  genres: [indie-folk, world-acoustic, chillwave, indie-pop]
+  bpm: [90, 130]
+  era: [2018, 2026]
+  energy: [0.5, 0.85]
+  valence: [0.65, 0.95]
+  vocal: optional
+  duration_target_s: [60, 300]
+  trend_source: tiktok_creative_center
+
+"Podcast / interview (under-VO music bed)":
+  genres: [ambient-electronic, lo-fi-piano, minimal-percussion]
+  bpm: [60, 100]
+  era: [2010, 2026]
+  energy: [0.2, 0.5]
+  valence: [0.5, 0.85]
+  vocal: instrumental_only
+  duration_target_s: [300, 3600]
+  trend_source: none
+  notes: "Must duck cleanly under speech. 6-12 dB sidechain bed."
+
+"News / journalism package":
+  genres: [score-suspense, ambient-tense, broadcast-news-bumpers]
+  bpm: [80, 130]
+  era: [2010, 2026]
+  energy: [0.4, 0.75]
+  valence: [0.3, 0.7]
+  vocal: instrumental_only
+  duration_target_s: [30, 180]
+  trend_source: none
+  notes: "Avoid melodic earworms; the music must serve the reporting, not compete."

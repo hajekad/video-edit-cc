@@ -1,0 +1,132 @@
+[submodule "agents/Claude-Image-Production-Plugin"]
+	path = agents/Claude-Image-Production-Plugin
+	url = https://github.com/danielrosehill/Claude-Image-Production-Plugin.git
+[submodule "agents/Claude-Video-Editor-Plugin"]
+	path = agents/Claude-Video-Editor-Plugin
+	url = git@github.com:danielrosehill/Claude-Video-Editor-Plugin.git
+[submodule "agents/DepthFlow"]
+	path = agents/DepthFlow
+	url = https://github.com/BrokenSource/DepthFlow.git
+[submodule "agents/ECC"]
+	path = agents/ECC
+	url = git@github.com:affaan-m/ECC.git
+[submodule "agents/EgoBlur"]
+	path = agents/EgoBlur
+	url = https://github.com/facebookresearch/EgoBlur.git
+[submodule "agents/Math-To-Manim"]
+	path = agents/Math-To-Manim
+	url = https://github.com/HarleyCoops/Math-To-Manim.git
+[submodule "agents/MiniCPM-V"]
+	path = agents/MiniCPM-V
+	url = https://github.com/OpenBMB/MiniCPM-V.git
+[submodule "agents/MuseTalk"]
+	path = agents/MuseTalk
+	url = https://github.com/TMElyralab/MuseTalk.git
+[submodule "agents/PySceneDetect"]
+	path = agents/PySceneDetect
+	url = https://github.com/Breakthrough/PySceneDetect.git
+[submodule "agents/VideoAgent-HKUDS"]
+	path = agents/VideoAgent-HKUDS
+	url = https://github.com/HKUDS/VideoAgent.git
+[submodule "agents/VideoAgent-Stanford"]
+	path = agents/VideoAgent-Stanford
+	url = https://github.com/wxh1996/VideoAgent.git
+[submodule "agents/VideoLingo"]
+	path = agents/VideoLingo
+	url = https://github.com/Huanshere/VideoLingo.git
+[submodule "agents/Youtube-clipper-skill"]
+	path = agents/Youtube-clipper-skill
+	url = https://github.com/op7418/Youtube-clipper-skill.git
+[submodule "agents/aesthetic-predictor"]
+	path = agents/aesthetic-predictor
+	url = https://github.com/LAION-AI/aesthetic-predictor.git
+[submodule "agents/ai-audio-descriptions"]
+	path = agents/ai-audio-descriptions
+	url = https://github.com/microsoft/ai-audio-descriptions.git
+[submodule "agents/alirezarezvani-claude-skills"]
+	path = agents/alirezarezvani-claude-skills
+	url = https://github.com/alirezarezvani/claude-skills.git
+[submodule "agents/all-in-one"]
+	path = agents/all-in-one
+	url = https://github.com/mir-aidj/all-in-one.git
+[submodule "agents/anthropic-claude-agent-sdk-demos"]
+	path = agents/anthropic-claude-agent-sdk-demos
+	url = https://github.com/anthropics/claude-agent-sdk-demos.git
+[submodule "agents/anthropic-claude-cookbooks"]
+	path = agents/anthropic-claude-cookbooks
+	url = https://github.com/anthropics/claude-cookbooks.git
+[submodule "agents/anthropic-cwc-long-running-agents"]
+	path = agents/anthropic-cwc-long-running-agents
+	url = https://github.com/anthropics/cwc-long-running-agents.git
+[submodule "agents/anthropic-knowledge-work-plugins"]
+	path = agents/anthropic-knowledge-work-plugins
+	url = https://github.com/anthropics/knowledge-work-plugins.git
+[submodule "agents/anthropic-skills"]
+	path = agents/anthropic-skills
+	url = https://github.com/anthropics/skills.git
+[submodule "agents/beat_this"]
+	path = agents/beat_this
+	url = https://github.com/CPJKU/beat_this.git
+[submodule "agents/blender-mcp"]
+	path = agents/blender-mcp
+	url = https://github.com/ahujasid/blender-mcp.git
+[submodule "agents/buttercut"]
+	path = agents/buttercut
+	url = git@github.com:barefootford/buttercut.git
+[submodule "agents/cc-blender-skill"]
+	path = agents/cc-blender-skill
+	url = https://github.com/RobLe3/cc-blender-skill.git
+[submodule "agents/claude-plugin-marketplace"]
+	path = agents/claude-plugin-marketplace
+	url = https://github.com/JosiahSiegel/claude-plugin-marketplace.git
+[submodule "agents/claude-youtube"]
+	path = agents/claude-youtube
+	url = https://github.com/AgriciDaniel/claude-youtube.git
+[submodule "agents/colour"]
+	path = agents/colour
+	url = https://github.com/colour-science/colour.git
+[submodule "agents/comfyui-workflow-skill"]
+	path = agents/comfyui-workflow-skill
+	url = https://github.com/LingyiChen-AI/comfyui-workflow-skill.git
+[submodule "agents/decord"]
+	path = agents/decord
+	url = https://github.com/dmlc/decord.git
+[submodule "agents/demucs"]
+	path = agents/demucs
+	url = https://github.com/facebookresearch/demucs.git
+[submodule "agents/digitalsamba-toolkit"]
+	path = agents/digitalsamba-toolkit
+	url = git@github.com:digitalsamba/claude-code-video-toolkit.git
+[submodule "agents/hyperframes"]
+	path = agents/hyperframes
+	url = https://github.com/heygen-com/hyperframes.git
+[submodule "agents/hyperframes-student-kit"]
+	path = agents/hyperframes-student-kit
+	url = https://github.com/nateherkai/hyperframes-student-kit.git
+[submodule "agents/manim-skill"]
+	path = agents/manim-skill
+	url = https://github.com/Yusuke710/manim-skill.git
+[submodule "agents/marketingskills"]
+	path = agents/marketingskills
+	url = https://github.com/coreyhaines31/marketingskills.git
+[submodule "agents/mcp-server-qdrant"]
+	path = agents/mcp-server-qdrant
+	url = https://github.com/qdrant/mcp-server-qdrant.git
+[submodule "agents/nsfw_model"]
+	path = agents/nsfw_model
+	url = https://github.com/GantMan/nsfw_model.git
+[submodule "agents/remotion-official-skills"]
+	path = agents/remotion-official-skills
+	url = https://github.com/remotion-dev/skills.git
+[submodule "agents/silero-vad"]
+	path = agents/silero-vad
+	url = https://github.com/snakers4/silero-vad.git
+[submodule "agents/toolkit-landscape"]
+	path = agents/toolkit-landscape
+	url = git@github.com:wilwaldon/Claude-Code-Video-Toolkit.git
+[submodule "agents/video-editor-for-claude-code"]
+	path = agents/video-editor-for-claude-code
+	url = git@github.com:seedprod/video-editor-for-claude-code.git
+[submodule "agents/video-use"]
+	path = agents/video-use
+	url = git@github.com:browser-use/video-use.git

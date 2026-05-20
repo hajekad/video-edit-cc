@@ -14,8 +14,10 @@ assets/
 # Not our IP; not version-controlled here.
 reference/
 
-# The agents/ dir is its own git repo, managed independently.
-agents/
+# Note: agents/ used to be its own git repo (gitignored from top-level).
+# As of the agents-merge migration, agents/ is a tracked subdirectory
+# of top-level. Its 44 third-party clones are git submodules registered
+# in top-level/.gitmodules with paths under agents/<name>.
 
 # OS / editor noise
 .DS_Store

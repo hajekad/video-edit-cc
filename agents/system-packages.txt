@@ -1,0 +1,9 @@
+# System packages installed on top of the baseline image.
+# One package per line. Comments (#) and blank lines ignored.
+# Both official repo and AUR packages are valid — paru resolves either.
+#
+# This file is the source of truth for "what's permanently installed".
+# At build time the Dockerfile installs everything listed here.
+# At runtime the agent appends to this file via `agent-install <pkg>`.
+# Never edit installs by hand outside of `agent-install` unless you want
+# to drop a package — in which case remove the line and rebuild.

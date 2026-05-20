@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""music-cues-template — emit a docs/music_cues.md scaffold.
+
+Reads /work/<id>/edit/music/cues.json + /work/<id>/edit/edl.json and
+writes /work/<id>/docs/music_cues.md. The cues sheet is the canonical
+handoff to marketing for the IG-add-music-in-UI workflow.
+
+Usage:
+  music-cues-template <project-slug>
+  music-cues-template <project-slug> --stdout    # print, don't write
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+def hms(seconds: float) -> str:
+    """0.0 -> '0:00.00', 75.5 -> '1:15.50'."""
+    m, s = divmod(seconds, 60.0)
+    return f"{int(m)}:{s:05.2f}"
+
+
+def build_sheet(work_dir: Path, manifest: dict, edl: dict, cues: dict) -> str:
+    music = manifest.get("music", {}) or {}
+    delivery = manifest.get("delivery", {}) or {}
+    persona = manifest.get("audience_persona") or "(not set)"
+    brand = (manifest.get("brand") or {}).get("name") or "(not set)"
+
+    track = music.get("proposed_track") or {}
+    title = track.get("title") or "(unset)"
+    artist = track.get("artist") or "(unset)"
+    source = track.get("source") or "(unset)"
+    license_ = track.get("license") or "n/a"
+    url = track.get("url") or ""
+    bpm = track.get("bpm")
+    key = track.get("key")
+
+    variant_names = [v.get("name") for v in delivery.get("variants", []) if v.get("name")]
+
+    lines = [
+        f"# Music cues — {manifest.get('id', work_dir.name)}",
+        "",
+        f"Brand: **{brand}**",
+        f"Audience persona: **{persona}**",
+        f"Delivery preset: **{delivery.get('preset') or '(not set)'}**",
+        f"Variants: {', '.join(variant_names) if variant_names else '(none)'}",
+        f"Music mode: **{music.get('mode') or '(not set)'}**",
+        "",
+        "## Why this mode",
+        "",
+        music.get("mode_why") or "(no rationale recorded — fill before delivery)",
+        "",
+        "## Proposed track",
+        "",
+        f"- Title: {title}",
+        f"- Artist: {artist}",
+        f"- Source: {source}",
+        f"- License: {license_}",
+        f"- URL: {url}" if url else "- URL: (n/a)",
+        f"- BPM: {bpm}" if bpm else "- BPM: (unset)",
+        f"- Key: {key}" if key else "- Key: (unset)",
+        "",
+        "## Timecode plan",
+        "",
+        "All times are **output-timeline** (Hard Rule 5), measured from the",
+        "first frame of the deliverable. Marketing replicates these inside",
+        "the platform UI (Instagram / TikTok music editor) with whatever",
+        "track the licensed library serves them.",
+        "",
+        "| Beat | Time | Action | Notes |",
+        "|---|---|---|---|",
+    ]
+
+    for beat in cues.get("beats", []):
+        t = beat.get("t", 0.0)
+        action = beat.get("action", "")
+        note = beat.get("note", "")
+        lines.append(f"| {beat.get('name', '?')} | {hms(t)} | {action} | {note} |")
+
+    if not cues.get("beats"):
+        lines.append("| (no beats recorded) | — | — | populate edit/music/cues.json |")
+
+    lines += [
+        "",
+        "## Platform-UI replacement guide",
+        "",
+        "If the exact proposed track isn't in the platform's licensed",
+        "library, pick a replacement matching these criteria:",
+        "",
+    ]
+
+    persona_yaml = work_dir.parent.parent / "agents" / "fsh-music-mood-bridge" / "personas.yaml"
+    if persona_yaml.exists():
+        lines += [
+            f"- Genre band: (per personas.yaml :: {persona})",
+            f"- BPM band: (per personas.yaml :: {persona})",
+            f"- Era: (per personas.yaml :: {persona})",
+            f"- Vocals: (per personas.yaml :: {persona})",
+        ]
+    else:
+        lines.append("- (personas.yaml not reachable from here)")
+
+    lines += [
+        "",
+        "## Marketing handoff",
+        "",
+        f"1. Upload the `{manifest.get('slug', work_dir.name)}*_CLEAN_FOR_UI_MUSIC.mp4` to the platform muted.",
+        "2. Open the in-platform music editor.",
+        "3. Search for the proposed track; if absent, pick a replacement matching the criteria above.",
+        "4. Drop the track onto the timeline. Sync the first downbeat to the timecodes above.",
+        "5. Apply the duck-points (the platform usually does this automatically when 'voice priority' is on).",
+        "",
+        "## Rights audit",
+        "",
+        f"Reference the project's `/work/{work_dir.name}/docs/music_rights.md` for the canonical license record.",
+        "",
+    ]
+
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("slug")
+    ap.add_argument("--stdout", action="store_true")
+    ap.add_argument("--work-root", default="/work")
+    args = ap.parse_args()
+
+    work_dir = Path(args.work_root) / args.slug
+    if not work_dir.is_dir():
+        print(f"no project at {work_dir}", file=sys.stderr)
+        return 2
+
+    manifest_path = work_dir / "manifest.json"
+    edl_path = work_dir / "edit" / "edl.json"
+    cues_path = work_dir / "edit" / "music" / "cues.json"
+
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    edl = json.loads(edl_path.read_text()) if edl_path.exists() else {}
+    cues = json.loads(cues_path.read_text()) if cues_path.exists() else {}
+
+    sheet = build_sheet(work_dir, manifest, edl, cues)
+    if args.stdout:
+        sys.stdout.write(sheet)
+        return 0
+
+    out_path = work_dir / "docs" / "music_cues.md"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(sheet)
+    print(out_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

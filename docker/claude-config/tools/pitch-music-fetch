@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""pitch-music-fetch — acquire a music track for an internal-reference
+pitch artifact via yt-dlp.
+
+Use case: marketing won't sign a $50k–$200k sync-license check based on
+a textual mood board. They sign when they watch the 30-second cut with
+the actual proposed track hitting the money beat and feel it click. The
+agent's job is to put that real track in front of them as quickly and
+legally as possible — within the bounded-use envelope of internal-pitch
+artifacts.
+
+Legal frame (industry-standard for agency / creative-studio pitch work):
+- Track is fetched ONLY for internal review, ONLY for the
+  `internal_review` variant (filename suffix `_INTERNAL_REVIEW`).
+- The variant carries a visible `PITCH PREVIEW — NOT FOR DISTRIBUTION`
+  watermark (applied by build-variants on the basis of
+  manifest.music.source = "yt-dlp-fetch").
+- The `platform_clean` variant remains music-free regardless.
+- The artifact stays inside `/work/<slug>/` and `/assets/<id>/output/`.
+  It is NEVER uploaded to a platform, never streamed publicly, never
+  shared outside the marketing review chain.
+- If marketing decides to ship with the proposed track, they procure a
+  real sync license OR pick an equivalent from the platform's licensed
+  in-app music library on upload.
+
+This is the same legal envelope a Cannes-pitch animatic uses when an
+agency mocks up a campaign with a real song to win the client's sign-off
+on the music investment. It is NOT a copyright workaround. It is a
+proposal artifact governed by fair-use-for-pitch.
+
+Usage:
+  pitch-music-fetch <project-slug> --url <youtube-url>
+  pitch-music-fetch <project-slug> --search "<title> <artist>"
+  pitch-music-fetch <project-slug> --url <url> --duration 30
+                                   [--out /custom/path.mp3]
+                                   [--start 22]   # offset into track
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def sanitize(name: str) -> str:
+    out = re.sub(r"[^a-zA-Z0-9._-]+", "_", name)
+    out = re.sub(r"_+", "_", out).strip("_")
+    return out[:80] or "track"
+
+
+def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+    print("$", " ".join(cmd), file=sys.stderr, flush=True)
+    return subprocess.run(cmd, check=True, **kw)
+
+
+def yt_dlp_fetch(query_or_url: str, dest_dir: Path, is_search: bool) -> tuple[Path, dict]:
+    """Returns (downloaded_mp3_path, metadata_dict)."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    target = f"ytsearch1:{query_or_url}" if is_search else query_or_url
+
+    # First, get metadata without downloading so we know the title.
+    info_cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--no-playlist", target]
+    info_proc = subprocess.run(info_cmd, capture_output=True, text=True)
+    if info_proc.returncode != 0:
+        print(f"yt-dlp metadata fetch failed:\n{info_proc.stderr}", file=sys.stderr)
+        sys.exit(2)
+    info = json.loads(info_proc.stdout)
+
+    # For search results, yt-dlp returns a playlist-style object; pick first entry.
+    if "entries" in info and info["entries"]:
+        info = info["entries"][0]
+
+    title = info.get("title", "untitled")
+    uploader = info.get("uploader", info.get("channel", "unknown"))
+    duration = info.get("duration", 0)
+    webpage_url = info.get("webpage_url", target)
+    video_id = info.get("id", "")
+
+    safe_name = f"proposed_{sanitize(title)}"
+    out_template = str(dest_dir / f"{safe_name}.%(ext)s")
+
+    # Audio-only download, mp3 conversion.
+    dl_cmd = [
+        "yt-dlp",
+        "-f", "bestaudio",
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",  # best VBR
+        "--no-playlist",
+        "--no-warnings",
+        "-o", out_template,
+        webpage_url,
+    ]
+    run(dl_cmd)
+
+    mp3_path = dest_dir / f"{safe_name}.mp3"
+    if not mp3_path.exists():
+        # yt-dlp sometimes writes a different extension; find it
+        candidates = list(dest_dir.glob(f"{safe_name}.*"))
+        if not candidates:
+            sys.exit(f"download succeeded but no file found in {dest_dir}")
+        mp3_path = candidates[0]
+
+    metadata = {
+        "title": title,
+        "uploader": uploader,
+        "duration_s": duration,
+        "source_url": webpage_url,
+        "video_id": video_id,
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "source": "yt-dlp-fetch",
+        "license_status": "pitch-fair-use",
+        "distribution_allowed": False,
+        "path": str(mp3_path),
+    }
+    return mp3_path, metadata
+
+
+def trim_clip(src_mp3: Path, start: float, duration: float, dest: Path) -> Path:
+    """Optional trim — extract a section of the track at a specific offset."""
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", str(start), "-t", str(duration),
+        "-i", str(src_mp3),
+        "-c:a", "copy",
+        str(dest),
+    ]
+    run(cmd)
+    return dest
+
+
+def update_manifest(manifest_path: Path, metadata: dict) -> None:
+    if not manifest_path.exists():
+        print(f"warn: no manifest at {manifest_path}; skipping manifest update",
+              file=sys.stderr)
+        return
+
+    manifest = json.loads(manifest_path.read_text())
+
+    # Update music section without stomping other fields
+    manifest.setdefault("music", {})
+    manifest["music"]["mode"] = manifest["music"].get("mode") or "internal-reference"
+    manifest["music"]["proposed_track"] = metadata
+    manifest["music"]["pending_dropin"] = False
+    manifest["music"]["source"] = "yt-dlp-fetch"
+
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"manifest.music.proposed_track updated in {manifest_path}", file=sys.stderr)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("slug")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--url", help="Direct URL (YouTube/Vimeo/etc — anything yt-dlp supports)")
+    src.add_argument("--search", help="Search query (uses ytsearch1:)")
+    ap.add_argument("--start", type=float, default=None, help="Trim start offset in seconds")
+    ap.add_argument("--duration", type=float, default=None, help="Trim duration in seconds")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="Explicit output path. Default: /work/<slug>/edit/music/proposed_<title>.mp3")
+    ap.add_argument("--work-root", default="/work")
+    args = ap.parse_args()
+
+    work_dir = Path(args.work_root) / args.slug
+    if not work_dir.is_dir():
+        print(f"no project at {work_dir}", file=sys.stderr)
+        return 2
+
+    music_dir = work_dir / "edit" / "music"
+
+    mp3_path, metadata = yt_dlp_fetch(
+        args.url or args.search,
+        music_dir,
+        is_search=bool(args.search),
+    )
+
+    if args.start is not None or args.duration is not None:
+        trim_out = args.out or (mp3_path.parent / f"{mp3_path.stem}_trim.mp3")
+        trim_clip(
+            mp3_path,
+            args.start or 0.0,
+            args.duration or (metadata["duration_s"] - (args.start or 0.0)),
+            trim_out,
+        )
+        metadata["trim_start_s"] = args.start
+        metadata["trim_duration_s"] = args.duration
+        metadata["path"] = str(trim_out)
+        print(f"trimmed clip → {trim_out}", file=sys.stderr)
+
+    if args.out and args.start is None and args.duration is None:
+        # User wanted custom path but no trim → just rename
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(mp3_path, args.out)
+        metadata["path"] = str(args.out)
+
+    update_manifest(work_dir / "manifest.json", metadata)
+
+    print(json.dumps(metadata, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

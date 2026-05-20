@@ -172,32 +172,175 @@ For each candidate the agent uses, write to `/work/<id>/docs/music-rights.md`:
 The reviewer sub-agent (`issue-state-review.sh`) checks this file
 exists and is current before allowing the `delivered` stage flip.
 
-## Going outside royalty-free
+## Three modes (pick by artifact lifecycle, not by blanket rule)
 
-User can authorize copyrighted use by setting in manifest:
+The skill operates in one of three modes per project. Mode lives at
+`manifest.music.mode`. The agent picks it by reading the **artifact's
+lifecycle** — what happens to the deliverable after the agent hands
+it off?
+
+### Mode 1: `baked-royalty-free` (default for public-distribution variants)
+
+Music is sourced from the royalty-free corpus and baked into the
+output. Used for:
+- YouTube long-form (`youtube-landscape-1080p`, `youtube-landscape-4k`)
+- LinkedIn (`linkedin-square`)
+- Shorts (`shorts-vertical`)
+- Broadcast handoff (`broadcast-mezz`) when no licensed track is supplied
+- Any `platform_final` variant
+
+Search corpus: FMA, Jamendo, Pixabay, Mixkit, NCS, ccMixter, YouTube
+Audio Library. Default behavior of `find_music()`. Music Rights audit
+file is required.
+
+### Mode 2: `internal-reference` (proposal artifacts, not distribution)
+
+The artifact is an **internal review preview** — the marketing team
+watches it to approve the editorial direction, then uploads a separate
+`platform_clean` variant to the platform and adds licensed music
+inside the platform UI. Used for:
+- `internal_review` variant of Reels (`reels-vertical`)
+- `internal_review` variant of TikTok (`tiktok-vertical`)
+- Any artifact whose filename carries `_INTERNAL_REVIEW` suffix
+- Client review screeners where the music choice is being proposed,
+  not shipped
+
+In this mode the artifact is a **pitch proposal**, not a distribution
+copy. Its purpose is to make marketing feel the dollar-to-impact ratio
+click in their gut, with the actual proposed track hitting the actual
+money beat. Mood-board descriptions and royalty-free stand-ins fail
+this purpose — marketing doesn't sign a $50k–$200k sync-license check
+on a vibe; they sign when they hear the track they're paying for.
+
+The legal envelope is the same as a creative-agency Cannes-pitch
+animatic. It is industry-standard, fair-use-for-proposal work — NOT a
+copyright workaround.
+
+**The agent's job — in this order**:
+
+1. **Trend-scout the audience** via
+   `/opt/claude-config/tools/trend-scout` (when available — see Tier-2
+   doctrine in fsh-music-mood-bridge). Identify what tracks peer
+   brands in the same audience persona have been using on the target
+   platform in the last 4 weeks. Output is a ranked list of candidate
+   audio URLs. If trend-scout isn't wired or returns empty, fall
+   through to (2).
+
+2. **Pitch-fetch the top candidate** via
+   `/opt/claude-config/tools/pitch-music-fetch`. yt-dlp audio
+   extraction; the tool records `manifest.music.source =
+   "yt-dlp-fetch"`, `license_status = "pitch-fair-use"`,
+   `distribution_allowed = false`. The `build-variants` tool then
+   auto-applies the `PITCH PREVIEW — NOT FOR DISTRIBUTION` watermark
+   to the `_INTERNAL_REVIEW.mp4` artifact. This is the default path.
+
+3. **User-supplied track** when the user has named a specific song or
+   dropped a file at `/assets/<id>/music/`. Use it directly. Same
+   watermark applies because the user-named track may still be
+   copyrighted; the watermark is keyed off
+   `manifest.music.source == "user-supplied"` only when
+   `license_proof_path` is null.
+
+4. **Royalty-free corpus** via the `find_music()` aggregator when a
+   trending peer-brand candidate isn't identifiable AND the user
+   hasn't named a song AND the persona's mood band has a
+   genuinely-strong royalty-free match (Pixabay / YouTube Audio
+   Library / FMA / Jamendo). Last resort BEFORE drop-in scaffold.
+   Watermark NOT applied because royalty-free tracks are legally
+   distributable.
+
+5. **Drop-in scaffold** ONLY when 1-4 all fail (no peer-brand recon,
+   no fetchable URL, no user-supplied track, no royalty-free match).
+   Then call `/opt/claude-config/tools/dropin-scaffold <slug> music`
+   to scaffold the user-drops-a-file fallback path. Document in
+   `docs/issues/music-acquisition-blocked.md` why 1-4 failed.
+
+6. **Ship `platform_clean` only + pending_music marker.** Only kicks
+   in when (5) also fails — i.e., the user is non-technical and the
+   drop-in path will never be filled. Produce `platform_clean.mp4`
+   alone with `docs/music_cues.md` as the textual handoff. Marketing
+   picks a track in the platform editor on upload.
+
+**Why pitch-fetch is the default, not a workaround:**
+
+The user of this system is a director or marketing lead, not an
+engineer. They cannot:
+- Browse a Cloudflare-protected music library and download the file
+- Drop the file at the right path
+- Run `python add_music.py /path/to/track.mp3`
+
+If the agent's "music workflow" depends on those steps, the agent has
+no music workflow. The pitch-fetch path is the only design that
+delivers the actual purpose — a watchable artifact with the real
+proposed track — without requiring non-existent user skill.
+
+**NEVER reach for option 6** — there is no option 6. Specifically:
+- NEVER generate sine-wave guide tones / metronome clicks / noise
+  beds / TTS-narrated cue announcements as a music substitute. The
+  internal_review variant either has actual proposed music or it does
+  not exist at all.
+- NEVER ship an `internal_review.mp4` whose audio stream is
+  synthesized "guide tones." Smoke test #2 did this and the marketer
+  played back 8 beeps + silence. That fails the deliverable purpose.
+
+The cues sheet at `/work/<id>/docs/music_cues.md` is the canonical
+handoff — it tells marketing the exact in/out/duck/swell timecodes so
+they can replicate the sync inside the platform UI with whatever the
+licensed library serves them. The cues sheet is always written; the
+internal_review variant is conditional on options 1-4 succeeding.
+
+This mode is NOT a copyright workaround. It is a recognition that
+proposal artifacts are not distribution. See
+`/docs/PROMPT.md` § "Calibration: overcautious refusal is also
+failure" for the rationale.
+
+### Mode 3: `baked-licensed` (user has explicit license proof)
+
+User has authorized a specific copyrighted track for distribution and
+has a license proof on file. Set in manifest:
 
 ```json
 {
   "music": {
-    "copyright_ok": true,
-    "copyright_rationale": "Client has YouTube ContentID monetization-share deal with [label]",
+    "mode": "baked-licensed",
+    "license_proof": {
+      "track": "Artist — Title",
+      "license_type": "sync license | YouTube ContentID monetization share | direct purchase",
+      "license_doc_path": "/assets/<id>/licenses/<file>.pdf",
+      "rationale": "Client has YouTube ContentID monetization-share deal with [label]"
+    },
     "additional_sources": ["spotify_top_charts", "tiktok_creative_center"]
   }
 }
 ```
 
-When this flag is set:
-- Extend search to TikTok Creative Center HTML scrape (the one
-  practical "trending per audience" source — see
-  `docs/research/07-music-workflow.md` § Trending data)
+When this mode is active:
+- Extend search to TikTok Creative Center HTML scrape (trending per
+  audience — see `docs/research/07-music-workflow.md` § Trending data)
 - Extend to Billboard Hot 100 via `guoguo12/billboard-charts`
-- For each candidate, run `chromaprint + AcoustID` to check if the
-  track is in the commercial-music corpus
+- For each candidate, run `chromaprint + AcoustID` to check the
+  commercial-music corpus
 - **ALWAYS warn the user** in the delivery summary that copyrighted
-  music was used, naming the tracks + sources
+  music was used, naming the tracks + sources + license proof path
 
-The agent NEVER assumes copyright_ok = true. The user must say so
-explicitly.
+The agent NEVER assumes `mode = baked-licensed` unless the license
+proof path is present and the file exists.
+
+## Mode-selection decision
+
+```
+delivery.preset → music_default_mode (from delivery-presets.json)
+                ↓
+agent reviews artifact lifecycle:
+  - Reels / TikTok / IG-style platform add-music-in-UI?
+        → internal-reference for internal_review variant
+        → "no music" for platform_clean variant
+  - YouTube long-form / Shorts / LinkedIn / broadcast?
+        → baked-royalty-free (default)
+        → baked-licensed (only if license_proof present)
+  - User supplied a specific copyrighted track?
+        → baked-licensed iff license_proof exists; else internal-reference only
+```
 
 ## What this skill CANNOT do
 

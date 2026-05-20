@@ -1,0 +1,200 @@
+{
+  "$schema": "fsh-delivery-presets/v1",
+  "description": "Platform-specific delivery specs. Single source of truth read by scaffold-project.sh, /render, and the /music command. Add a preset by giving its constraints — never hard-code platform specs in command bodies or stage docs.",
+  "presets": {
+    "reels-vertical": {
+      "platform": "Instagram Reels",
+      "aspect": "9:16",
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "max_duration_s": 90,
+      "min_duration_s": 3,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "4.1",
+      "vbitrate_max_mbps": 10,
+      "acodec": "aac",
+      "aprofile": "lc",
+      "abitrate_kbps": 128,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "color_space": "bt709",
+      "music_default_mode": "internal-reference",
+      "music_added_in_ui": true,
+      "safe_zone": {
+        "top_pct": 18,
+        "bottom_pct": 20,
+        "left_pct": 6,
+        "right_pct": 22,
+        "rationale": "Instagram UI overlays: top 18% has profile + share buttons; bottom 20% has caption bar + audio chip; right 22% has like/comment/share column. Subtitles and supers must stay outside these bands."
+      },
+      "subtitle_y_anchor_pct": 66,
+      "logo_anchor": "top-left-pct(8,8)",
+      "notes": "Marketing uploads the platform_clean variant muted and adds licensed music in Instagram UI. Internal-review variant carries the proposed bed + cues sheet. Safe zones derived from smoke-test #1 manual safe-zone fix."
+    },
+    "tiktok-vertical": {
+      "platform": "TikTok",
+      "aspect": "9:16",
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "max_duration_s": 600,
+      "min_duration_s": 3,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "4.1",
+      "vbitrate_max_mbps": 12,
+      "acodec": "aac",
+      "aprofile": "lc",
+      "abitrate_kbps": 128,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "color_space": "bt709",
+      "music_default_mode": "internal-reference",
+      "music_added_in_ui": true,
+      "safe_zone": {
+        "top_pct": 15,
+        "bottom_pct": 25,
+        "left_pct": 5,
+        "right_pct": 25,
+        "rationale": "TikTok bottom-zone is taller (caption + username + audio + buttons). Right column carries like/comment/share. Treat 25% bottom + 25% right as no-go for important content."
+      },
+      "subtitle_y_anchor_pct": 64
+    },
+    "shorts-vertical": {
+      "platform": "YouTube Shorts",
+      "aspect": "9:16",
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "max_duration_s": 60,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "4.1",
+      "vbitrate_max_mbps": 12,
+      "acodec": "aac",
+      "abitrate_kbps": 192,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "music_default_mode": "baked-royalty-free",
+      "music_added_in_ui": false,
+      "safe_zone": {
+        "top_pct": 12,
+        "bottom_pct": 18,
+        "left_pct": 4,
+        "right_pct": 18,
+        "rationale": "Shorts UI is lighter than Reels/TikTok. Subscribe button bottom-center; like/dislike right column."
+      },
+      "subtitle_y_anchor_pct": 70,
+      "notes": "YouTube has Audio Library inside Studio but most creators bake in. Default to royalty-free baked unless project says otherwise."
+    },
+    "linkedin-square": {
+      "platform": "LinkedIn feed",
+      "aspect": "1:1",
+      "width": 1080,
+      "height": 1080,
+      "fps": 30,
+      "max_duration_s": 600,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "4.1",
+      "acodec": "aac",
+      "abitrate_kbps": 192,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "music_default_mode": "baked-royalty-free",
+      "subtitles": "burn-in-default",
+      "safe_zone": {
+        "top_pct": 8,
+        "bottom_pct": 12,
+        "left_pct": 4,
+        "right_pct": 4,
+        "rationale": "Feed-style autoplay muted; minimal UI overlay. Burn-in subtitles must always be visible inside the 80% central band."
+      },
+      "subtitle_y_anchor_pct": 85,
+      "notes": "LinkedIn autoplays muted; burn subtitles."
+    },
+    "youtube-landscape-1080p": {
+      "platform": "YouTube long-form / web",
+      "aspect": "16:9",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "4.2",
+      "vbitrate_max_mbps": 16,
+      "acodec": "aac",
+      "abitrate_kbps": 192,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "music_default_mode": "baked-royalty-free",
+      "safe_zone": {
+        "top_pct": 5,
+        "bottom_pct": 10,
+        "left_pct": 3,
+        "right_pct": 3,
+        "rationale": "Long-form: title-bar at top hides during playback; progress bar at bottom claims ~10% on mobile. End-screen cards occupy lower-right last 20s."
+      },
+      "subtitle_y_anchor_pct": 88
+    },
+    "youtube-landscape-4k": {
+      "platform": "YouTube 4K master",
+      "aspect": "16:9",
+      "width": 3840,
+      "height": 2160,
+      "fps": 30,
+      "vcodec": "h264_nvenc",
+      "vprofile": "high",
+      "vlevel": "5.1",
+      "vbitrate_max_mbps": 45,
+      "acodec": "aac",
+      "abitrate_kbps": 256,
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "music_default_mode": "baked-royalty-free"
+    },
+    "broadcast-mezz": {
+      "platform": "Broadcast handoff / archive",
+      "aspect": "16:9",
+      "width": 1920,
+      "height": 1080,
+      "fps": 25,
+      "vcodec": "prores_ks",
+      "vprofile": "3",
+      "acodec": "pcm_s24le",
+      "asample_rate_hz": 48000,
+      "achannels": 2,
+      "loudness_lufs": -23,
+      "loudness_tp_dbtp": -1,
+      "music_default_mode": "baked-licensed"
+    }
+  },
+  "variants": {
+    "internal_review": {
+      "description": "Watch-and-approve artifact for the marketing team. Music baked in as a PROPOSAL so reviewers see what the agent is suggesting. Never distributed publicly. Suffix: _INTERNAL_REVIEW.",
+      "music_required": true,
+      "music_sources_allowed": ["royalty-free", "youtube-mp3-as-reference", "user-supplied"],
+      "filename_suffix": "_INTERNAL_REVIEW"
+    },
+    "platform_clean": {
+      "description": "Picture-locked deliverable with dialogue+sfx+ambient, no music stem. Marketing uploads this muted and adds licensed music inside the platform UI. Suffix: _CLEAN_FOR_UI_MUSIC.",
+      "music_required": false,
+      "audio_stems": ["dialogue", "sfx", "ambient"],
+      "filename_suffix": "_CLEAN_FOR_UI_MUSIC"
+    },
+    "platform_final": {
+      "description": "Picture + final audio mix (including baked-in licensed or royalty-free music). For platforms that don't auto-license inside the UI (YouTube long-form, broadcast handoff).",
+      "music_required": true,
+      "music_sources_allowed": ["royalty-free", "user-supplied-licensed"],
+      "filename_suffix": ""
+    }
+  },
+  "music_modes": {
+    "baked-royalty-free": "Music sourced from FMA/Jamendo/Pixabay/Mixkit/NCS/YT-Audio-Library and baked into the output. Default for Shorts/LinkedIn/YouTube-long.",
+    "baked-licensed": "Music from a user-supplied licensed source, baked in. Requires manifest.music.license_proof.",
+    "internal-reference": "Proposed track baked into the internal_review variant only. NEVER baked into platform_clean. The platform-clean variant ships music-free; reviewers compare against the internal_review to approve the editorial proposal. Used for Reels/TikTok where music is added in the platform UI.",
+    "none": "Silent piece OR dialogue/sfx only. Music skipped per editorial choice."
+  }
+}

@@ -1,0 +1,52 @@
+# seed_trends.yaml — curated trending-audio seed list per vertical/region.
+#
+# Used by /opt/claude-config/tools/trend-scout as a fallback (and
+# initial seed) when TikTok Creative Center's API is unavailable,
+# rate-limited, or returns nothing useful.
+#
+# Each entry: a trending sound + which brand verticals + audiences it's
+# landing with right now. The agent ADDS entries here when it observes
+# peer brands using a sound on a Reel/TikTok and that observation isn't
+# already captured. Entries decay — re-validate quarterly; remove
+# anything older than 6 months unless it's still landing on peer-brand
+# reels.
+#
+# Keys:
+#   id        — short slug for cross-reference
+#   title     — track / sound title
+#   artist    — original artist (where applicable)
+#   url       — YouTube URL (canonical; agent fetches via pitch-music-fetch)
+#   verticals — list of brand verticals this is landing with
+#   audience  — list of audience-persona keys (matches personas.yaml)
+#   energy    — low | mid | high (rough; refines persona match)
+#   register  — meme | trend | cinematic | corporate | nostalgic
+#   regions   — list of ISO 3166-1 alpha-2 codes where it's hot
+#   observed_on — peer-brand handles where the sound was seen
+#   seen_at   — ISO date the agent or curator last validated this entry
+#   notes     — anything else useful (Skoda using it, etc.)
+
+trends:
+  - id: bouncy-yaris
+    title: "Why's this dealer?"
+    artist: "Niko B"
+    url: "https://www.youtube.com/watch?v=SerTJpflwMM"
+    verticals: [automotive, lifestyle, brand-self-aware]
+    audience:
+      - "Gen-Z TikTok aesthetic / lifestyle"
+      - "Millennial professional creators on YouTube"
+    energy: high
+    register: meme
+    regions: [CZ, SK, PL, DE, AT, GB, US]
+    observed_on:
+      - "@skoda (Reels)"
+    seen_at: "2026-05-15"
+    notes: |
+      The "Bouncy Yaris" meme audio. Skoda used it on heritage-industrial
+      content as a self-aware pivot — signal that even conservative
+      brands are reaching for meme audio on Reels. Inappropriate for
+      strict-formality B2B but useful when a brand wants to puncture
+      its own seriousness.
+
+# Add entries below as you observe them. Format same as above.
+# When you add an entry, prefer canonical YouTube URLs over
+# TikTok-specific links (yt-dlp handles YouTube most reliably).

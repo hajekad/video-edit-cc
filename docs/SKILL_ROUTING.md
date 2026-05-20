@@ -84,6 +84,17 @@ hints and for the agent's own dispatch decisions.
 | TTS (voiceover) | F5-TTS or XTTS via `agent-install` (deferred, large model weights) | — | GPU; ElevenLabs explicitly out (per user) |
 | Image gen (local) | FLUX.2 Klein 4B via diffusers in `/opt/ml-venv` | — | Add to ml-venv on first need |
 | Image edit (local) | Qwen-Image-Edit via diffusers | — | Add to ml-venv on first need |
+| Brief interpretation (auto-derive deliverable spec) | `/docs/BRIEF_INTERPRETATION.md` doctrine + `/inventory` three-pass read | — | Must finish before `/plan`. Records into `manifest.brief_intent` |
+| Delivery preset lookup | `/opt/claude-config/delivery-presets.json` | manual ffmpeg spec | Single source of truth for Reels / TikTok / Shorts / LinkedIn / YouTube / broadcast specs incl. safe zones |
+| Subtitle burn-in (drawtext) | `/opt/claude-config/tools/burn-subtitles --preset <preset>` | inline ffmpeg drawtext | Reads safe_zone from delivery-presets; default since smoke test #1 ASS scaling bug |
+| Music workflow | `/music` slash command → `agents/fsh-royalty-free-music/` + `agents/fsh-music-mood-bridge/` | inline ffmpeg sidechain | Three modes: baked-royalty-free / internal-reference / baked-licensed. Mode = function of artifact lifecycle |
+| Trending-audio discovery | `/opt/claude-config/tools/trend-scout` + `/opt/claude-config/seed_trends.yaml` | manual research of peer-brand Reels | TikTok Creative Center is the public window; seed_trends.yaml is the curated catalog (agent adds entries as it observes peer brands using sounds) |
+| Pitch-music fetch (yt-dlp) | `/opt/claude-config/tools/pitch-music-fetch <slug> --url <yt>` | `/dropin-scaffold music` (last resort) | Industry-standard fair-use-for-proposal envelope. Records source/license_status/distribution_allowed=false in manifest. Pairs with PITCH PREVIEW watermark from build-variants |
+| Music cues sheet | `/opt/claude-config/tools/music-cues-template <slug>` | — | Marketing handoff for IG-add-music-in-UI workflow. Required when `music.mode != none` |
+| Two-variant delivery build | `/opt/claude-config/tools/build-variants <slug> <base.mp4> <out-dir>` | — | Routes internal_review / platform_clean / platform_final per manifest.delivery.variants[] |
+| Audience persona match | `agents/fsh-music-mood-bridge/personas.yaml` lookup | add new persona to yaml with rationale | 21 personas incl. petrochemical/energy/pharma/manufacturing B2B-industrial |
+| Brand asset fetch | `agents/fsh-brand-assets/` skill (official press pages only) | dropin-scaffold fallback | Never aggregators (logo.wine, brandfetch, seeklogo) |
+| Drop-in scaffold (classifier blocked) | `/opt/claude-config/tools/dropin-scaffold <slug> <asset-type>` | — | When autonomous fetch is denied OR official source not resolvable. Asset types: music, logo, license-doc, voiceover, client-footage, supers |
 
 ## Sub-agent dispatch patterns
 

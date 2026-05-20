@@ -109,6 +109,22 @@ RUN uv python install 3.12 && \
         pyannote.audio
 
 # ---------------------------------------------------------------------------
+# Pre-warm WhisperX large-v3 weights into a baked path. Reason: smoke test
+# discovered the first-run HuggingFace download stalled mid-stream (the
+# .incomplete file never grew), forcing the agent to recover by hand with
+# curl. Baking the model into the image makes the first transcription
+# deterministic and removes the runtime network dependency.
+#
+# ~3 GB. Lives at /opt/whisper-models/ — agent code reads FSH_WHISPER_MODEL_DIR.
+# If the model file already exists in the layer cache, the download is a no-op.
+# ---------------------------------------------------------------------------
+ENV FSH_WHISPER_MODEL_DIR=/opt/whisper-models \
+    FSH_WHISPER_MODEL_NAME=large-v3
+RUN mkdir -p "$FSH_WHISPER_MODEL_DIR" && \
+    /opt/ml-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('$FSH_WHISPER_MODEL_NAME', download_root='$FSH_WHISPER_MODEL_DIR', compute_type='int8')" && \
+    ls -lh "$FSH_WHISPER_MODEL_DIR"
+
+# ---------------------------------------------------------------------------
 # agent-install: canonical install path inside the container. Installs the
 # requested package(s) via paru (official repos or AUR) AND appends each one
 # to /agents/system-packages.txt so the package survives image rebuild.

@@ -16,15 +16,23 @@ enforces the contract:
 1. **Per-segment extracts** already exist from cuts-extracted stage.
 2. **Concat with `-c copy`** — lossless, no re-encode.
 3. **Composite overlays** with `setpts=PTS-STARTPTS+T/TB` (Hard Rule 4).
-4. **Subtitles applied LAST** in the filter chain (Hard Rule 1).
+4. **Subtitles applied LAST** — via `/opt/claude-config/tools/burn-subtitles`
+   (drawtext, default) as a separate final pass. See [audio-finalized](audio-finalized.md)
+   for the reason drawtext beats ASS here. Call `render.py --no-subtitles`
+   to produce the no-caption base, then burn captions on top.
 
 Preview render:
 ```bash
 python /agents/video-use/helpers/render.py \
     /work/<id>/edit/edl.json \
     --preview \
-    --subtitles /work/<id>/edit/master.srt \
-    -o /work/<id>/edit/preview.mp4
+    --no-subtitles \
+    -o /work/<id>/edit/preview_base.mp4
+
+/opt/claude-config/tools/burn-subtitles \
+    /work/<id>/edit/preview_base.mp4 \
+    /work/<id>/edit/master.srt \
+    /work/<id>/edit/preview.mp4
 ```
 
 Preview = 1280x720, fast NVENC preset, CRF ~28. Should complete in

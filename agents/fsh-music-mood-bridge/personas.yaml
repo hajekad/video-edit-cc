@@ -189,3 +189,58 @@
   duration_target_s: [30, 180]
   trend_source: none
   notes: "Avoid melodic earworms; the music must serve the reporting, not compete."
+
+"Petrochemical / heavy industrial B2B":
+  genres: [ambient-corporate, cinematic-orchestral, modern-classical, ambient-electronic, post-rock-instrumental]
+  bpm: [70, 105]
+  era: [2015, 2026]
+  energy: [0.45, 0.75]
+  valence: [0.55, 0.85]
+  vocal: instrumental_only
+  duration_target_s: [30, 240]
+  trend_source: none
+  brand_voice: "industrial-pride / sustainability-forward / technical-confidence"
+  notes: |
+    Subjects: refineries, pyrolysis pilots, chemical engineering,
+    energy infrastructure, ESG corporate. Audience = B2B
+    stakeholders, investors, regulators, partner companies — NOT
+    consumers. Music carries gravitas + forward motion without
+    bombast. Avoid drill / trap / hyperpop entirely. Cinematic
+    orchestral or ambient-corporate beds at -14 to -16 LUFS under
+    dialogue. No melodic earworms; the engineering speaks.
+
+"Energy / utilities / infrastructure B2B":
+  genres: [ambient-corporate, cinematic-orchestral, modern-classical, ambient-electronic]
+  bpm: [75, 110]
+  era: [2015, 2026]
+  energy: [0.5, 0.8]
+  valence: [0.55, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [30, 240]
+  trend_source: none
+  brand_voice: "stability / scale / future-ready"
+  notes: "Sister persona to petrochem. Similar mood band, slightly more uplift."
+
+"Pharma / biotech / lab science B2B":
+  genres: [ambient-electronic, neo-classical, score-uplifting, minimalist-piano]
+  bpm: [70, 100]
+  era: [2015, 2026]
+  energy: [0.4, 0.7]
+  valence: [0.6, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [30, 240]
+  trend_source: none
+  brand_voice: "precision / discovery / responsibility"
+  notes: "Avoid medical-thriller dread. Music supports cleanroom-grade confidence."
+
+"Manufacturing / automotive / heavy machinery B2B":
+  genres: [cinematic-orchestral, percussive-industrial, rock-instrumental, electronic-uplifting]
+  bpm: [90, 130]
+  era: [2015, 2026]
+  energy: [0.6, 0.9]
+  valence: [0.6, 0.9]
+  vocal: instrumental_only
+  duration_target_s: [30, 240]
+  trend_source: none
+  brand_voice: "engineering-pride / scale / capability"
+  notes: "Slightly more energy than pure ambient-corporate — production-line cadence."

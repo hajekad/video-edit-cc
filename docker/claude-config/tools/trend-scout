@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""trend-scout — identify trending audio for a project's audience/region/vertical.
+
+Strategy (in order):
+  1. Query TikTok Creative Center's public sounds endpoint with realistic
+     headers. Best-effort; may be rate-limited or geo-blocked.
+  2. Merge in entries from /opt/claude-config/seed_trends.yaml — the
+     curated trend catalog the agent grows over time.
+  3. Rank candidates by audience / vertical / region match.
+
+Output: JSON list of ranked candidates, each with title/artist/url/register
+ready for pitch-music-fetch to consume.
+
+Usage:
+  trend-scout --audience "<persona-key>" \\
+              --vertical "<industrial|automotive|...>" \\
+              --region CZ \\
+              [--peer-brands brand1,brand2] \\
+              [--limit 10]
+              [--out /work/<slug>/edit/music/trend_candidates.json]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlencode
+
+SEED_PATH = Path("/opt/claude-config/seed_trends.yaml")
+TIKTOK_API = "https://ads.tiktok.com/creative_radar_api/v1/popular_trend/list"
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
+
+def load_seed() -> list[dict]:
+    if not SEED_PATH.exists():
+        return []
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        # Fallback: very basic line-based load is unreliable; require yaml.
+        print("[trend-scout] PyYAML not in venv; skipping seed file",
+              file=sys.stderr)
+        return []
+    data = yaml.safe_load(SEED_PATH.read_text()) or {}
+    return data.get("trends", []) or []
+
+
+def try_tiktok_creative_center(region: str, limit: int) -> list[dict]:
+    """Best-effort. Returns a (possibly empty) list of candidates."""
+    try:
+        import urllib.request
+        import urllib.error
+    except Exception:
+        return []
+
+    params = {
+        "period": "7",
+        "page": "1",
+        "limit": str(min(limit, 50)),
+        "country_code": region.upper(),
+    }
+    url = f"{TIKTOK_API}?{urlencode(params)}"
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en",
+            "Origin": "https://ads.tiktok.com",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+        print(f"[trend-scout] TikTok endpoint unavailable: {e}", file=sys.stderr)
+        return []
+
+    items = data.get("data", {}).get("sound_list", []) or data.get("sound_list", []) or []
+    out: list[dict] = []
+    for it in items[:limit]:
+        title = it.get("title") or it.get("name") or "untitled"
+        artist = it.get("author") or it.get("artist") or "unknown"
+        link = it.get("link")
+        if not link and it.get("share_url"):
+            link = it["share_url"]
+        if not link:
+            continue
+        out.append({
+            "id": it.get("sound_id", title.replace(" ", "_").lower()),
+            "title": title,
+            "artist": artist,
+            "url": link,
+            "register": "trend",
+            "regions": [region.upper()],
+            "source": "tiktok-creative-center",
+        })
+    return out
+
+
+def score_candidate(c: dict, audience: str | None,
+                    vertical: str | None, region: str | None) -> float:
+    s = 0.0
+    if audience and audience in (c.get("audience") or []):
+        s += 3.0
+    if vertical and vertical in (c.get("verticals") or []):
+        s += 2.5
+    if region and region.upper() in (c.get("regions") or []):
+        s += 1.5
+    if c.get("source") == "tiktok-creative-center":
+        s += 1.0  # fresher signal
+    # Recency boost from seen_at
+    seen_at = c.get("seen_at")
+    if seen_at:
+        try:
+            d = datetime.fromisoformat(seen_at)
+            age_days = (datetime.now(timezone.utc) - d.replace(tzinfo=timezone.utc)).days
+            if age_days < 30:
+                s += 1.0
+            elif age_days < 90:
+                s += 0.5
+        except Exception:
+            pass
+    return s
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--audience", default=None,
+                    help="Persona key from agents/fsh-music-mood-bridge/personas.yaml")
+    ap.add_argument("--vertical", default=None,
+                    help="Brand vertical: industrial, automotive, pharma, lifestyle, ...")
+    ap.add_argument("--region", default="US")
+    ap.add_argument("--peer-brands", default="",
+                    help="Comma-separated peer brand handles to bias toward")
+    ap.add_argument("--limit", type=int, default=10)
+    ap.add_argument("--out", type=Path, default=None,
+                    help="Write JSON to this path. Default: stdout.")
+    args = ap.parse_args()
+
+    candidates: list[dict] = []
+    candidates += try_tiktok_creative_center(args.region, args.limit * 2)
+    candidates += load_seed()
+
+    peer_brands = {b.strip() for b in args.peer_brands.split(",") if b.strip()}
+    if peer_brands:
+        for c in candidates:
+            observed = c.get("observed_on") or []
+            if any(p in handle for p in peer_brands for handle in observed):
+                c["_peer_brand_match"] = True
+
+    ranked = sorted(
+        candidates,
+        key=lambda c: (
+            score_candidate(c, args.audience, args.vertical, args.region)
+            + (2.0 if c.get("_peer_brand_match") else 0.0)
+        ),
+        reverse=True,
+    )[: args.limit]
+
+    result = {
+        "queried_at": datetime.now(timezone.utc).isoformat(),
+        "audience": args.audience,
+        "vertical": args.vertical,
+        "region": args.region,
+        "peer_brands": sorted(peer_brands),
+        "candidates": ranked,
+        "sources": {
+            "tiktok_creative_center_available": any(
+                c.get("source") == "tiktok-creative-center" for c in candidates
+            ),
+            "seed_entries": sum(
+                1 for c in candidates if c.get("source") != "tiktok-creative-center"
+            ),
+        },
+    }
+
+    payload = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(payload + "\n")
+        print(f"wrote {args.out}", file=sys.stderr)
+    print(payload)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

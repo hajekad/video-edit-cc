@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# orientation-check — force the orientation hypothesis to be tested,
+# not assumed.
+#
+# Smoke test #2 shipped a 30-second cut where every Sony VVHA*.MP4
+# segment was framed wrong because the agent assumed "stored 3840x2160
+# = composed landscape." Smoke test #1 (different agent, same footage)
+# had figured out "composed vertical, stored landscape, needs
+# transpose=2" by actually running both orientations side-by-side.
+# This tool bakes that comparison into a non-skippable step.
+#
+# Usage:
+#   orientation-check <video-file> [<output-dir>]
+#
+# Output: a single composite JPEG showing six frames in a 2x3 grid:
+#   top row    — extracted "as stored" (no rotation applied)
+#   bottom row — extracted with transpose=2 applied (90 CCW)
+#
+# Save path defaults to /work/<project>/edit/orient_check/<basename>_orientations.jpg
+# Caller (the agent) reads the JPEG and picks the orientation where
+# subjects stand upright. Pick + WHY + evidence-path goes into
+# manifest.inputs[<i>].quirks[].
+#
+# Exit codes:
+#   0  composite written
+#   1  source not readable
+#   2  bad usage
+
+set -eo pipefail
+
+SRC="${1:?usage: orientation-check <video-file> [<output-dir>]}"
+[ -f "$SRC" ] || { echo "no such file: $SRC" >&2; exit 1; }
+
+OUT_DIR="${2:-}"
+if [ -z "$OUT_DIR" ]; then
+  # Try to land it next to the project's edit/ tree if we can infer one.
+  # /work/<slug>/raw/<...>/file.mp4 → /work/<slug>/edit/orient_check/
+  case "$SRC" in
+    */work/*/raw/*)
+      proj_root="${SRC%%/raw/*}"
+      OUT_DIR="$proj_root/edit/orient_check"
+      ;;
+    *)
+      OUT_DIR="$(dirname "$SRC")/orient_check"
+      ;;
+  esac
+fi
+mkdir -p "$OUT_DIR"
+
+base=$(basename "$SRC")
+stem="${base%.*}"
+OUT="$OUT_DIR/${stem}_orientations.jpg"
+
+# Pick three sample timestamps: 10%, 50%, 90% through the file.
+dur=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$SRC" 2>/dev/null || echo 0)
+if [ -z "$dur" ] || awk -v d="$dur" 'BEGIN{exit !(d<=0)}'; then
+  # Static fallback
+  T1=1; T2=2; T3=3
+else
+  T1=$(awk -v d="$dur" 'BEGIN{printf "%.2f", d*0.1}')
+  T2=$(awk -v d="$dur" 'BEGIN{printf "%.2f", d*0.5}')
+  T3=$(awk -v d="$dur" 'BEGIN{printf "%.2f", d*0.9}')
+fi
+
+# Render the 2x3 composite in a single ffmpeg invocation.
+# Each cell is 360x480 (rough portrait box) so the grid fits comfortably.
+# Top row: as-stored. Bottom row: transpose=2 rotation applied first.
+ffmpeg -y -hide_banner -loglevel error \
+  -ss "$T1" -i "$SRC" \
+  -ss "$T2" -i "$SRC" \
+  -ss "$T3" -i "$SRC" \
+  -filter_complex "
+    [0:v]select=eq(n\,0),scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[a1];
+    [1:v]select=eq(n\,0),scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[a2];
+    [2:v]select=eq(n\,0),scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[a3];
+    [0:v]select=eq(n\,0),transpose=2,scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[b1];
+    [1:v]select=eq(n\,0),transpose=2,scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[b2];
+    [2:v]select=eq(n\,0),transpose=2,scale=360:480:force_original_aspect_ratio=decrease,pad=360:480:(ow-iw)/2:(oh-ih)/2[b3];
+    [a1][a2][a3]hstack=inputs=3[top];
+    [b1][b2][b3]hstack=inputs=3[bot];
+    [top][bot]vstack=inputs=2,drawtext=text='AS_STORED':x=10:y=10:fontcolor=yellow:fontsize=24:box=1:boxcolor=black@0.7,drawtext=text='TRANSPOSE_2':x=10:y=494:fontcolor=cyan:fontsize=24:box=1:boxcolor=black@0.7[out]
+  " \
+  -map "[out]" -frames:v 1 -q:v 3 "$OUT"
+
+cat <<EOF
+$OUT
+
+orientation-check: comparison written.
+- Top row (yellow label AS_STORED) is the source orientation ffmpeg reads natively.
+- Bottom row (cyan label TRANSPOSE_2) is the source rotated 90° CCW.
+
+Pick the orientation where:
+  - subjects stand upright (heads up, feet down)
+  - horizons / floor lines run horizontal
+  - any visible text reads left-to-right
+
+If TRANSPOSE_2 is correct, add this quirk to manifest.inputs[<i>].quirks[]:
+  {
+    "id": "sony-vertical-composed-stored-landscape",
+    "fix": "apply transpose=2 before scale",
+    "evidence": "$OUT",
+    "confirmed_by": "visual-comparison"
+  }
+
+If AS_STORED is correct, record that too — silence is a decision, not a default:
+  {
+    "id": "stored-landscape-truly-landscape",
+    "fix": "no transpose; scale + center-crop if delivering vertical",
+    "evidence": "$OUT",
+    "confirmed_by": "visual-comparison"
+  }
+
+See /docs/SOURCE_QUIRKS.md for the full catalog of camera/codec patterns
+the agent must NOT re-discover per project.
+EOF

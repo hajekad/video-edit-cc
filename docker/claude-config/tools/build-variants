@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# build-variants — produce all delivery variants for a project from a
+# common base render. Reads manifest.delivery.variants[] and routes
+# each to the right post-processing chain (music bake vs clean stem
+# vs final mix).
+#
+# Variants honored:
+#   internal_review   → music baked (per manifest.music), suffix _INTERNAL_REVIEW
+#   platform_clean    → no music, suffix _CLEAN_FOR_UI_MUSIC
+#   platform_final    → music baked, no special suffix
+#
+# Usage:
+#   build-variants <project-slug> <base.mp4> <output-dir>
+#
+# Expects:
+#   /work/<slug>/manifest.json with .delivery.variants[] + .music.mode
+#   /work/<slug>/edit/music/<title>.mp3 (when music mode != none)
+#   /work/<slug>/edit/master.srt (subs already burned into <base.mp4>)
+
+set -eo pipefail
+
+SLUG="${1:?usage: build-variants <slug> <base.mp4> <out-dir>}"
+BASE="${2:?missing base.mp4}"
+OUT_DIR="${3:?missing output dir}"
+
+WORK_ROOT="${FSH_WORK_ROOT:-/work}"
+PROJ="$WORK_ROOT/$SLUG"
+MANIFEST="$PROJ/manifest.json"
+
+[ -f "$MANIFEST" ] || { echo "no manifest at $MANIFEST" >&2; exit 2; }
+[ -f "$BASE" ] || { echo "no base render at $BASE" >&2; exit 2; }
+mkdir -p "$OUT_DIR"
+
+variants=$(jq -r '.delivery.variants[]?.name // empty' "$MANIFEST")
+[ -z "$variants" ] && {
+  echo "manifest.delivery.variants[] is empty — defaulting to platform_final" >&2
+  variants="platform_final"
+}
+
+mode=$(jq -r '.music.mode // "none"' "$MANIFEST")
+music_file=$(jq -r '.music.proposed_track.path // empty' "$MANIFEST")
+
+bake_music() {
+  local in="$1" out="$2" track="$3"
+  if [ ! -f "$track" ]; then
+    echo "music track not found: $track — copying base without music" >&2
+    cp "$in" "$out"
+    return
+  fi
+  ffmpeg -y -v error \
+    -i "$in" -i "$track" \
+    -filter_complex "[1:a]aloop=loop=-1:size=2147483647[mloop]; \
+                     [mloop]volume=0.30[mlow]; \
+                     [0:a][mlow]sidechaincompress=threshold=0.05:ratio=8:attack=5:release=200[duck]; \
+                     [0:a][duck]amix=inputs=2:weights=1.0 0.85:duration=first[mix]" \
+    -map 0:v -map "[mix]" \
+    -c:v copy -c:a aac -b:a 192k -ar 48000 \
+    -movflags +faststart \
+    "$out"
+}
+
+# When the proposed music comes from a yt-dlp pitch fetch (copyrighted track
+# under fair-use-for-proposal), the resulting variant MUST carry an
+# unmistakable on-screen watermark so the artifact can never be confused
+# for the public deliverable. Applied AFTER bake_music to keep the
+# filter chain simple and the watermark uniformly present.
+apply_pitch_watermark() {
+  local in="$1" out="$2"
+  local font="/usr/share/fonts/liberation/LiberationSans-Bold.ttf"
+  [ -f "$font" ] || font="/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
+  # Two layers: yellow corner badge always visible + dimmed center "PITCH PREVIEW"
+  # that fades in every 5s so it can't be cropped out without sacrificing the cut.
+  ffmpeg -y -v error -i "$in" \
+    -vf "drawtext=fontfile='$font':text='PITCH PREVIEW — NOT FOR DISTRIBUTION':\
+fontcolor=yellow:fontsize=28:box=1:boxcolor=black@0.75:boxborderw=10:\
+x=(w-text_w)/2:y=80,\
+drawtext=fontfile='$font':text='INTERNAL REVIEW ONLY':\
+fontcolor=white@0.55:fontsize=72:\
+x=(w-text_w)/2:y=(h-text_h)/2:\
+enable='lt(mod(t\,6)\,2)'" \
+    -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p \
+    -c:a copy -movflags +faststart "$out"
+}
+
+copy_clean() {
+  local in="$1" out="$2"
+  ffmpeg -y -v error -i "$in" -c copy -movflags +faststart "$out"
+}
+
+for v in $variants; do
+  case "$v" in
+    internal_review)
+      out="$OUT_DIR/${SLUG}_INTERNAL_REVIEW.mp4"
+      source=$(jq -r '.music.source // empty' "$MANIFEST")
+      if [ "$mode" = "internal-reference" ] || [ "$mode" = "baked-royalty-free" ] || [ "$mode" = "baked-licensed" ]; then
+        echo "internal_review ← bake music ($mode, source=${source:-unknown})" >&2
+        # Bake to a tmp file first; apply pitch watermark if the source
+        # was a yt-dlp fetch (copyrighted under fair-use-for-proposal).
+        tmp_baked="${out%.mp4}.baked.mp4"
+        bake_music "$BASE" "$tmp_baked" "$PROJ/$music_file"
+        if [ "$source" = "yt-dlp-fetch" ]; then
+          echo "internal_review ← applying PITCH PREVIEW watermark (yt-dlp pitch fetch)" >&2
+          apply_pitch_watermark "$tmp_baked" "$out"
+          rm -f "$tmp_baked"
+        else
+          mv "$tmp_baked" "$out"
+        fi
+      else
+        echo "internal_review ← clean (music mode=$mode)" >&2
+        copy_clean "$BASE" "$out"
+      fi
+      ;;
+    platform_clean)
+      out="$OUT_DIR/${SLUG}_CLEAN_FOR_UI_MUSIC.mp4"
+      echo "platform_clean ← no music stem (always)" >&2
+      copy_clean "$BASE" "$out"
+      ;;
+    platform_final)
+      out="$OUT_DIR/${SLUG}.mp4"
+      if [ "$mode" = "baked-royalty-free" ] || [ "$mode" = "baked-licensed" ]; then
+        echo "platform_final ← bake music ($mode)" >&2
+        bake_music "$BASE" "$out" "$PROJ/$music_file"
+      elif [ "$mode" = "internal-reference" ]; then
+        echo "platform_final SKIPPED — internal-reference mode produces no public variant" >&2
+        continue
+      else
+        echo "platform_final ← no music" >&2
+        copy_clean "$BASE" "$out"
+      fi
+      ;;
+    *)
+      echo "unknown variant: $v — skipping" >&2
+      ;;
+  esac
+done
+
+echo "built variants for $SLUG → $OUT_DIR"
+ls -lh "$OUT_DIR"

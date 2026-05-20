@@ -1,9 +1,9 @@
 ---
-description: Show the active project's manifest, stage, and open issues.
+description: Show the active FSH project's manifest, stage, and open issues.
 argument-hint: [project-name]
 ---
 
-# /status — print project state
+# /fsh-status — print project state
 
 If `$1` is given, report on `/work/$1/`. Otherwise auto-detect the
 most-recently-modified non-delivered project under `/work/`.

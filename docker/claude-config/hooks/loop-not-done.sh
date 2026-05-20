@@ -45,22 +45,60 @@ active_project() {
   printf '%s' "$newest"
 }
 
-# Print pending /assets/<name>/ projects that have raw files but no
-# corresponding /work/<id>/. Caller emits the workspace-scaffold instruction.
+# Slugify an asset id (turn "Q2-2026/PyrolyzaKveten" into
+# "q2-2026-pyrolyzakveten"); kept in sync with scaffold-project.sh.
+slugify_id() {
+  printf '%s' "$1" | tr '[:upper:]/' '[:lower:]-'
+}
+
+# True if a directory looks like a "leaf" project (has raw/ or prompt.txt
+# or contains media files directly, or nested folders that contain media).
+looks_like_project() {
+  local d="$1"
+  [ -d "$d/raw" ] && [ -n "$(ls -A "$d/raw" 2>/dev/null)" ] && return 0
+  [ -f "$d/prompt.txt" ] && return 0
+  # Quick scan for media right under d (depth 1).
+  local hit
+  hit=$(find "$d" -maxdepth 2 -mindepth 1 \
+          \( -iname '*.mp4' -o -iname '*.mov' -o -iname '*.mkv' \
+          -o -iname '*.webm' -o -iname '*.avi' -o -iname '*.m4v' \
+          -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.flac' \
+          -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+          -o -iname '*.heic' -o -iname '*.cr2' -o -iname '*.cr3' \
+          -o -iname '*.arw' -o -iname '*.nef' -o -iname '*.dng' \) \
+          -print -quit 2>/dev/null)
+  [ -n "$hit" ]
+}
+
+# Print pending /assets/<id>/ projects that have media but no corresponding
+# /work/<slug>/. Walks one level deep so /assets/Q2-2026/PyrolyzaKveten/
+# is discovered as the id "Q2-2026/PyrolyzaKveten".
 unscaffolded_assets() {
   shopt -s nullglob
   for d in "$ASSETS_ROOT"/*/; do
     [ -d "$d" ] || continue
-    local name
-    name=$(basename "$d")
-    # Skip if a /work/<name>/ already exists (1:1 by default).
-    [ -d "$WORK_ROOT/$name" ] && continue
-    # Only flag if there's something in raw/ or a prompt.txt
-    if [ -d "$d/raw" ] && [ -n "$(ls -A "$d/raw" 2>/dev/null)" ]; then
-      printf '%s\n' "$name"
-    elif [ -f "$d/prompt.txt" ]; then
-      printf '%s\n' "$name"
+    local parent
+    parent=$(basename "$d")
+    [ "$parent" = "lost+found" ] && continue
+    if looks_like_project "$d"; then
+      local slug
+      slug=$(slugify_id "$parent")
+      [ -d "$WORK_ROOT/$slug" ] && continue
+      printf '%s\n' "$parent"
+      continue
     fi
+    # Parent has no media of its own — look for nested leaf projects.
+    for c in "$d"*/; do
+      [ -d "$c" ] || continue
+      local child id slug
+      child=$(basename "$c")
+      id="$parent/$child"
+      slug=$(slugify_id "$id")
+      [ -d "$WORK_ROOT/$slug" ] && continue
+      if looks_like_project "$c"; then
+        printf '%s\n' "$id"
+      fi
+    done
   done
   shopt -u nullglob
 }
@@ -134,11 +172,11 @@ action_sentence() {
   local action="$1" id="$2"
   case "$action" in
     inventory)
-      printf 'Good. Now focus on this: scaffold /work/%s/ (mkdir edit/, manifest.json with stage=input-received, raw symlink to /assets/%s/raw/). Then ffprobe every source and write the inputs[] array.\n' "$id" "$id" ;;
+      printf 'Good. Now focus on this: run /inventory %s — scaffold, ffprobe, transcribe, AND run the three-pass brief-interpretation read (surface / signal / audience) per /docs/BRIEF_INTERPRETATION.md. Record platform / audience / brand / music_mode / variants into manifest.brief_intent with WHY lines. Set manifest.brief_intent.derived = true before advancing.\n' "$id" ;;
     transcribe)
-      printf 'Good. Now focus on this: transcribe every source in /work/%s/raw/ via WhisperX on GPU into /work/%s/edit/transcripts/<name>.json, then pack into edit/takes_packed.md.\n' "$id" "$id" ;;
+      printf 'Good. Now focus on this: transcribe every source in /work/%s/raw/ via the baked WhisperX large-v3 (FSH_WHISPER_MODEL_DIR=/opt/whisper-models) into /work/%s/edit/transcripts/<name>.json, then pack into edit/takes_packed.md. Cache per source.\n' "$id" "$id" ;;
     propose-strategy)
-      printf 'Good. Now focus on this: read /work/%s/edit/takes_packed.md and the user prompt in /assets/%s/prompt.txt (if present). Write a 4-8 sentence strategy proposal to /work/%s/docs/strategy.md and ask the user to confirm. Set manifest.stage=strategy-confirmed only after explicit user OK.\n' "$id" "$id" "$id" ;;
+      printf 'Good. Now focus on this: read /work/%s/manifest.json brief_intent block + /work/%s/edit/takes_packed.md + the persona constraints from /agents/fsh-music-mood-bridge/personas.yaml. Write a strategy proposal to /work/%s/docs/strategy.md that BUILDS on brief_intent (platform/audience/brand/music_mode/variants) and adds: arc, take choices, cut direction, animation plan, grade, subtitle style, length. One WHY line per decision. Self-approve. The user audits on return.\n' "$id" "$id" "$id" ;;
     build-edl)
       printf 'Good. Now focus on this: spawn the editor sub-agent (Agent tool, general-purpose) with the brief in /work/%s/docs/strategy.md and takes_packed.md. Produce /work/%s/edit/edl.json — word-boundary-snapped ranges, padded 30-200ms, beat labels and quotes. Update manifest.stage=edl-built.\n' "$id" "$id" ;;
     extract-cuts)
@@ -162,16 +200,20 @@ action_sentence() {
 
 # ---- main dispatch ---------------------------------------------------------
 
-# 1. Any /assets/<name>/ without a /work/<name>/ workspace? Ingest it.
+# 1. Any /assets/<id>/ without a /work/<slug>/ workspace? Ingest it.
 unscaffolded=$(unscaffolded_assets | head -1)
 if [ -n "$unscaffolded" ]; then
-  printf 'Good. Now focus on this: a new project "%s" landed in /assets/%s/. Scaffold /work/%s/ (mkdir edit/, write manifest.json with stage=input-received, symlink raw -> /assets/%s/raw/), git init the workspace, and run inventory.\n' "$unscaffolded" "$unscaffolded" "$unscaffolded" "$unscaffolded" >&2
+  slug=$(slugify_id "$unscaffolded")
+  printf 'Good. Now focus on this: a new project "%s" landed in /assets/%s/. Run scaffold-project.sh "%s" (it accepts the nested id, writes manifest with slug=%s, and symlinks raw safely). Then run inventory.\n' "$unscaffolded" "$unscaffolded" "$unscaffolded" "$slug" >&2
   exit 2
 fi
 
-# 2. Any active project? Dispatch its next action.
+# 2. Any active project? First, auto-advance the manifest stage so the
+#    loop can't get stuck at input-received while downstream artifacts
+#    already exist on disk. Then dispatch its next action.
 active=$(active_project)
 if [ -n "$active" ]; then
+  /opt/claude-config/hooks/auto-advance-stage.sh "$active" 2>&1 | head -3 >&2 || true
   action=$(next_action_for "$active")
   if [ "$action" = "done" ]; then
     # All-delivered fallthrough — treat as no-active. Keep walking.

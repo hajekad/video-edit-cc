@@ -1,0 +1,43 @@
+# agents/ tracks:
+#   - LICENSE, CLAUDE.md, AGENTS.md, system-packages.txt (proprietary, authored)
+#   - .gitmodules + each cloned third-party skill as a git submodule
+#   - any fsh-*/ skill dirs we author
+# and ignores per-runtime junk + any video/audio/model files that might
+# leak in during agent operation.
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Python build noise (if a submodule pip-installs into here for some reason)
+__pycache__/
+*.pyc
+.venv/
+
+# Defense-in-depth: deny heavy binary formats anywhere under agents/
+# (submodules' contents are gitignored by submodule semantics, but if
+#  a heavy file ever ends up in our tracked tree, this catches it)
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.m4v
+*.flv
+*.wav
+*.mp3
+*.flac
+*.aac
+*.m4a
+*.ogg
+*.opus
+*.pt
+*.pth
+*.safetensors
+*.gguf
+*.ggml
+*.onnx
+*.ckpt
+*.h5

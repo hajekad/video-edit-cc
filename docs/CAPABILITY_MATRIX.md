@@ -36,8 +36,9 @@ pipeline ladder in ARCHITECTURE.md):
 | Overlay: PIL programmatic | engine-not-wired | `video-use/SKILL.md` PIL pattern (inline scripts) | PNG sequence + ffmpeg-composed MP4 in slot dir |
 | Overlay composite (PTS-shifted) | wired-unvalidated | `render.py` overlay logic | rendered composite shows overlays at correct time, not source-time |
 | Subtitle generation (whisper) | wired-unvalidated | `Claude-Video-Editor-Plugin/skills/burn-subtitles/` | `edit/master.srt` valid |
-| Subtitle styling | engine-not-wired | force_style preset from manifest.subtitles | rendered preview shows styled subs (font, color, margin) |
-| Subtitle last in chain | wired-unvalidated | `render.py` enforces order | inspect rendered output: no overlay hides any subtitle line |
+| Subtitle styling | wired-unvalidated | `/opt/claude-config/tools/burn-subtitles` (drawtext) + delivery-presets safe_zone | rendered preview shows styled subs at correct y-anchor for the platform |
+| Subtitle last in chain | wired-unvalidated | `burn-subtitles` is a post-render pass after `render.py --no-subtitles` | inspect rendered output: no overlay hides any subtitle line |
+| Subtitle safe-zone per platform | wired-unvalidated | `delivery-presets.json :: presets.<id>.safe_zone` + `burn-subtitles --preset` | subtitle y-anchor stays clear of platform UI bands (Reels bottom-20%, TikTok bottom-25%, etc.) |
 | Render preview (720p) | wired-unvalidated | `render.py --preview` | `edit/preview.mp4` 1280x720, < 5min render for ≤2min source |
 | Render final (delivery res) | wired-unvalidated | `render.py` default + manifest.output_spec | `edit/final.mp4` matches manifest.output_spec |
 | Self-eval at cut boundaries | wired-unvalidated | timeline_view at every cut, max 3 fix iter | `.claude/state/self-eval.verdict` with PASS or detailed gap list |
@@ -54,6 +55,18 @@ pipeline ladder in ARCHITECTURE.md):
 | B-roll auto-insert | missing | no skill in collection | not viable in current set |
 | Auto-cut silences | engine-not-wired | `Claude-Video-Editor-Plugin/skills/auto-cut-silences/` (wraps `auto-editor`) | timeline with silent segments removed, no clipped speech |
 | GPU encode (NVENC) | engine-not-wired | ffmpeg `-c:v h264_nvenc` | `final.mp4` encoded with NVENC; 4x+ faster than libx264 |
+| Brief interpretation (auto-derive platform/audience/brand) | wired-unvalidated | `/docs/BRIEF_INTERPRETATION.md` + `/inventory` three-pass read | `manifest.brief_intent.derived == true` with WHY lines for platforms / audience / brand / delivery_pattern |
+| Delivery preset routing | wired-unvalidated | `/opt/claude-config/delivery-presets.json` + scaffold/render readers | `manifest.delivery.preset` set; render honors width/height/fps/codec/loudness from preset |
+| Two-variant delivery (internal_review + platform_clean) | wired-unvalidated | `/opt/claude-config/tools/build-variants` + manifest.delivery.variants[] | `_INTERNAL_REVIEW.mp4` (music baked) + `_CLEAN_FOR_UI_MUSIC.mp4` (no music stem) both present; ffprobe confirms music absence in clean variant |
+| Music workflow (royalty-free, internal-reference, baked-licensed) | wired-unvalidated | `agents/fsh-royalty-free-music` + `/music` slash command + `agents/fsh-music-mood-bridge` | `manifest.music.mode` matches artifact lifecycle; music_rights.md and music_cues.md both present |
+| Pitch-music fetch (yt-dlp + fair-use-for-proposal) | wired-unvalidated | `/opt/claude-config/tools/pitch-music-fetch` | actual mp3 in `/work/<slug>/edit/music/`; manifest.music.source = "yt-dlp-fetch"; license_status = "pitch-fair-use"; distribution_allowed = false |
+| PITCH PREVIEW watermark on internal_review | wired-unvalidated | `build-variants` auto-applies when manifest.music.source = "yt-dlp-fetch" | output `_INTERNAL_REVIEW.mp4` shows persistent yellow top-banner + cycling center "INTERNAL REVIEW ONLY" overlay |
+| Trend-scout (peer-brand audio recon) | wired-unvalidated | `/opt/claude-config/tools/trend-scout` + `/opt/claude-config/seed_trends.yaml` | `edit/music/trend_candidates.json` with ranked candidates from TikTok Creative Center + curated seed |
+| Music cues sheet (timecodes for IG-style add-music-in-UI) | wired-unvalidated | `/opt/claude-config/tools/music-cues-template` | `docs/music_cues.md` with in/duck/swell/tail timecodes (output-timeline) + replacement-track guide |
+| Audience persona matching | wired-unvalidated | `agents/fsh-music-mood-bridge/personas.yaml` (17+ personas including B2B-industrial bands) | `manifest.audience_persona` set; persona key found in yaml or added with rationale |
+| Brand asset retrieval (official sources only) | wired-unvalidated | `agents/fsh-brand-assets/` skill + `/inventory` automatic-research pass | `manifest.brand.logo_path` + `branding/source.md` audit trail with official URL + timestamp |
+| Drop-in scaffold (when classifier blocks fetch) | wired-unvalidated | `/opt/claude-config/tools/dropin-scaffold` | `/assets/<id>/<asset>/README.md` + `/work/<slug>/edit/add_<asset>.py` merge script + `manifest.<asset>.pending_dropin = true` |
+| Variant build (internal_review + platform_clean + platform_final routing) | wired-unvalidated | `/opt/claude-config/tools/build-variants` | per-variant outputs with correct suffix and music-mode-aware audio handling |
 
 ## Out-of-scope (MVP)
 

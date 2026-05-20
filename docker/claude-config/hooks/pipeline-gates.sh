@@ -30,13 +30,61 @@ fail_with() { printf '%s FAIL: %s\n' "$STAGE" "$1" >&2; fail=$((fail+1)); }
 # Gates accumulate downward: each stage requires everything before it.
 case "$STAGE" in
   delivered)
-    [ -f "$PROJ/edit/final.mp4" ] || fail_with "final.mp4 missing"
-    if [ -f "$PROJ/edit/final.mp4" ]; then
-      sz=$(stat -c %s "$PROJ/edit/final.mp4" 2>/dev/null || echo 0)
-      [ "$sz" -lt 1048576 ] && fail_with "final.mp4 < 1MB ($sz bytes); likely truncated"
+    # Either final.mp4 exists (single-variant flow) OR the variant pair exists.
+    asset_out=$(jq -r '.output_path // empty' "$MANIFEST" 2>/dev/null)
+    [ -n "$asset_out" ] || asset_out="/assets/$ID/output"
+    slug=$(jq -r '.slug // .id // empty' "$MANIFEST" 2>/dev/null)
+
+    # Variant flow: each declared variant must have a matching file with the
+    # mandated suffix in the output dir.
+    variant_count=$(jq -r '.delivery.variants | length // 0' "$MANIFEST" 2>/dev/null)
+    if [ "${variant_count:-0}" -gt 0 ]; then
+      [ -d "$asset_out" ] || fail_with "output dir $asset_out missing"
+      while IFS= read -r vname; do
+        case "$vname" in
+          internal_review)
+            ls "$asset_out"/*"_INTERNAL_REVIEW".mp4 >/dev/null 2>&1 \
+              || fail_with "missing <slug>_INTERNAL_REVIEW.mp4 in $asset_out — produced via /opt/claude-config/tools/build-variants"
+            ;;
+          platform_clean)
+            ls "$asset_out"/*"_CLEAN_FOR_UI_MUSIC".mp4 >/dev/null 2>&1 \
+              || fail_with "missing <slug>_CLEAN_FOR_UI_MUSIC.mp4 in $asset_out — produced via build-variants"
+            ;;
+          platform_final)
+            [ -f "$asset_out/${slug}.mp4" ] || [ -f "$asset_out/final.mp4" ] \
+              || fail_with "missing platform_final mp4 in $asset_out (expected ${slug}.mp4 or final.mp4)"
+            ;;
+        esac
+      done < <(jq -r '.delivery.variants[].name // empty' "$MANIFEST" 2>/dev/null)
+    else
+      # Legacy single-final flow.
+      [ -f "$PROJ/edit/final.mp4" ] || fail_with "final.mp4 missing"
+      if [ -f "$PROJ/edit/final.mp4" ]; then
+        sz=$(stat -c %s "$PROJ/edit/final.mp4" 2>/dev/null || echo 0)
+        [ "$sz" -lt 1048576 ] && fail_with "final.mp4 < 1MB ($sz bytes); likely truncated"
+      fi
+      { [ -d "$asset_out" ] && [ -f "$asset_out/final.mp4" ]; } \
+        || fail_with "delivery copy missing in $asset_out/final.mp4"
     fi
-    asset_out="/assets/$ID/output"
-    [ -d "$asset_out" ] && [ -f "$asset_out/final.mp4" ] || fail_with "delivery copy missing in $asset_out/final.mp4"
+
+    # When music.mode = internal-reference AND internal_review variant exists,
+    # the audio stream MUST NOT be synthesized guide tones (sine waves). Smoke
+    # test #2 invented that pattern; doctrine bans it. Quick proxy: mean
+    # volume in a real music bed sits between -28 dB and -10 dB; sine guide
+    # tones produce sparse spikes with long silence (mean << -40 dB).
+    music_mode=$(jq -r '.music.mode // "none"' "$MANIFEST" 2>/dev/null)
+    if [ "$music_mode" = "internal-reference" ]; then
+      ir_path=$(ls "$asset_out"/*"_INTERNAL_REVIEW".mp4 2>/dev/null | head -1)
+      if [ -n "$ir_path" ] && command -v ffmpeg >/dev/null; then
+        mean=$(ffmpeg -hide_banner -nostats -i "$ir_path" -af volumedetect -vn -f null - 2>&1 | awk -F': ' '/mean_volume:/{print $2; exit}' | awk '{print $1}')
+        if [ -n "$mean" ]; then
+          too_quiet=$(awk -v m="$mean" 'BEGIN{print (m < -38) ? 1 : 0}')
+          if [ "$too_quiet" = "1" ]; then
+            fail_with "internal_review audio mean is ${mean} dB — looks like sine-tone guide track or silence, NOT proposed music. Per DROPIN_SCAFFOLD_PATTERN.md: never invent audible substitutes. Ship platform_clean only with pending_music marker."
+          fi
+        fi
+      fi
+    fi
     ;& # fall through
 
   self-eval-passed)
@@ -67,6 +115,10 @@ case "$STAGE" in
 
   audio-finalized)
     [ -f "$PROJ/edit/master.srt" ] || fail_with "master.srt missing"
+    music_mode=$(jq -r '.music.mode // "none"' "$MANIFEST" 2>/dev/null)
+    if [ "$music_mode" != "none" ] && [ "$music_mode" != "null" ]; then
+      [ -f "$PROJ/docs/music_cues.md" ] || fail_with "docs/music_cues.md missing (required when music.mode != none — generate via /opt/claude-config/tools/music-cues-template)"
+    fi
     ;& # fall through
 
   overlays-applied)
@@ -98,12 +150,23 @@ case "$STAGE" in
     [ -f "$PROJ/docs/strategy.md" ] || fail_with "docs/strategy.md missing"
     approved=$(jq -r '.strategy.approved // false' "$MANIFEST" 2>/dev/null)
     [ "$approved" = "true" ] || fail_with "manifest.strategy.approved is not true"
+    derived=$(jq -r '.brief_intent.derived // false' "$MANIFEST" 2>/dev/null)
+    [ "$derived" = "true" ] || fail_with "manifest.brief_intent.derived is not true — run /inventory to derive platform/audience/brand before /plan"
     ;& # fall through
 
   inventoried)
     [ -f "$PROJ/edit/takes_packed.md" ] || fail_with "edit/takes_packed.md missing"
     inputs=$(jq -r '.inputs | length // 0' "$MANIFEST" 2>/dev/null)
     [ "${inputs:-0}" -gt 0 ] || fail_with "manifest.inputs[] is empty"
+    derived=$(jq -r '.brief_intent.derived // false' "$MANIFEST" 2>/dev/null)
+    [ "$derived" = "true" ] || fail_with "manifest.brief_intent.derived is not true — inventoried stage requires the three-pass brief read (see /docs/BRIEF_INTERPRETATION.md)"
+    [ -f "$PROJ/docs/audience_research.md" ] || fail_with "docs/audience_research.md missing — record persona, brand voice, audience research, and people-science levers as a first-class artifact (not just in README)"
+    # Mandatory orientation decision per video source (see SOURCE_QUIRKS.md).
+    # Each video input must carry at least one quirks[] entry with confirmed_by != null.
+    missing_quirks=$(jq -r '[.inputs[] | select((.file // "") | test("\\.(mp4|mov|mkv|webm|avi|m4v)$"; "i")) | select(((.quirks // []) | length) == 0) | .file] | join(", ")' "$MANIFEST" 2>/dev/null)
+    if [ -n "$missing_quirks" ]; then
+      fail_with "video source(s) without orientation decision in manifest.inputs[].quirks[]: $missing_quirks — run /opt/claude-config/tools/orientation-check on each, record the matched quirk per /docs/SOURCE_QUIRKS.md"
+    fi
     ;& # fall through
 
   input-received)

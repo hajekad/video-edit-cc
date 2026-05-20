@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""dropin-scaffold — generate a drop-in scaffold for a blocked external asset.
+
+When the agent can't autonomously fetch an asset (classifier denial,
+license review needed, official-source-only policy), it calls this to
+create:
+
+  1. /assets/<id>/<asset-type>/  with a README naming sources + unblock paths
+  2. /work/<slug>/edit/add_<asset-type>.py  merge script template
+  3. manifest.<asset-type>.pending_dropin = true
+
+Then the agent continues with everything else. When the user drops the
+file at the path, the next loop tick runs the merge script.
+
+Usage:
+  dropin-scaffold <project-slug> <asset-type> [--sources <url1,url2,...>]
+                                              [--notes <free-text>]
+
+Supported asset types (extend ASSET_TYPES dict to add more):
+  music       — track for video mix
+  logo        — brand mark / wordmark
+  license-doc — signed license / sync clearance PDF
+  voiceover   — pre-recorded VO stem
+  client-footage — additional source clips post-EDL
+  supers      — lower-third / supers / on-screen text PNGs (alpha)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+from string import Template
+
+ASSET_TYPES = {
+    "music": {
+        "drop_filename_glob": "track.{mp3,wav,m4a,flac}",
+        "drop_examples": ["track.mp3", "track.wav"],
+        "default_url_hints": [
+            "https://pixabay.com/music/search/corporate%20documentary/",
+            "https://studio.youtube.com/channel/UC/music",
+            "https://uppbeat.io/browse/genre",
+        ],
+        "merge_script_filename": "add_music.py",
+        "merges_into": ["hero music variants", "teaser music variants"],
+        "license_note": (
+            "Caller is responsible for ensuring the supplied track is "
+            "licensed for the intended use (Instagram Reels = commercial "
+            "use). Pixabay Content License, YouTube Audio Library "
+            "no-attribution, FMA CC-BY/CC0, and Uppbeat free-tier all "
+            "qualify. Spotify / Apple Music / YouTube-rip do NOT."
+        ),
+    },
+    "logo": {
+        "drop_filename_glob": "<brand>_logo_{white,color,mono}.png",
+        "drop_examples": ["orlen_logo_white.png", "orlen_logo_color.png"],
+        "default_url_hints": [
+            "<brand-domain>/media",
+            "<brand-domain>/press",
+            "<brand-domain>/about/brand",
+        ],
+        "merge_script_filename": "add_logo.py",
+        "merges_into": ["close-card composite", "lower-third end-card"],
+        "license_note": (
+            "Pull from the brand's OFFICIAL press / media page only. "
+            "Third-party logo aggregators (logo.wine, brandfetch, "
+            "seeklogo) may serve outdated or unauthorized marks that "
+            "fail brand-team review on the client side."
+        ),
+    },
+    "license-doc": {
+        "drop_filename_glob": "<asset>.pdf",
+        "drop_examples": ["track-sync-license.pdf", "footage-clearance.pdf"],
+        "default_url_hints": [
+            "(user-supplied — license docs come from the rights holder)",
+        ],
+        "merge_script_filename": "(none — recorded into manifest)",
+        "merges_into": ["manifest.music.license_proof (or asset equivalent)"],
+        "license_note": (
+            "A license doc unlocks baked-licensed mode for the "
+            "corresponding asset. Store the doc path in "
+            "manifest.<asset>.license_proof so the rights audit file "
+            "(docs/music_rights.md) can reference it."
+        ),
+    },
+    "voiceover": {
+        "drop_filename_glob": "vo_<scene>.{mp3,wav,m4a}",
+        "drop_examples": ["vo_intro.mp3", "vo_cta.wav"],
+        "default_url_hints": [
+            "(user-recorded — typically not a URL)",
+        ],
+        "merge_script_filename": "add_voiceover.py",
+        "merges_into": ["per-scene audio mix"],
+        "license_note": (
+            "VO talent contract should cover commercial use. If unsure, "
+            "treat as license-doc with pending_dropin until cleared."
+        ),
+    },
+    "client-footage": {
+        "drop_filename_glob": "<original-source-files>",
+        "drop_examples": ["VVHA9500.MP4", "IMG_2200.MOV"],
+        "default_url_hints": [
+            "(user-supplied — typically uploaded directly)",
+        ],
+        "merge_script_filename": "(triggers /inventory re-run)",
+        "merges_into": ["new ranges in EDL", "additional selects"],
+        "license_note": (
+            "Client footage inherits the client's rights. Confirm "
+            "before adding to delivery."
+        ),
+    },
+    "supers": {
+        "drop_filename_glob": "super_<n>.png",
+        "drop_examples": ["super_01.png", "super_02_lowerthird.png"],
+        "default_url_hints": [
+            "(user-supplied — typically designed by the brand team)",
+        ],
+        "merge_script_filename": "add_supers.py",
+        "merges_into": ["composite at scripted timecodes per manifest.supers[]"],
+        "license_note": (
+            "Supers are design assets; brand-team approval is implicit "
+            "in the deliverable."
+        ),
+    },
+}
+
+
+README_TEMPLATE = Template(
+    """# Drop $asset_type_pretty here
+
+Place the asset(s) here. Expected filename pattern: `$drop_filename_glob`.
+
+## What happens once it lands
+
+The merge script at `$merge_script_path` reads the dropped file and
+merges it into the corresponding deliverable(s): $merges_into.
+
+To run after dropping a file:
+
+    python $merge_script_path $drop_dir/$drop_example
+
+The pipeline's next loop tick will pick this up automatically; running
+the command yourself just makes it immediate.
+
+## Two ways to unblock
+
+1. **Authorize a specific URL** — name ONE specific URL and the agent
+   fetches it. Single-URL specificity is much cleaner classifier
+   signal than "any $asset_type_pretty from <category>". Candidate URLs:
+$source_list
+
+2. **Drop a file** — save the asset at `$drop_dir/$drop_example` from
+   your phone or laptop. Under 30 seconds end-to-end once the file is
+   in place.
+
+## License / source notes
+
+$license_note
+
+$notes
+"""
+)
+
+
+MERGE_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
+"""add_{asset_type} — merge a user-supplied {asset_type_pretty} into the project deliverables.
+
+Generated by dropin-scaffold. Adapt the merge logic to the project's
+specific delivery variants; this template handles the common case.
+
+Usage:
+    python {merge_script_path} <path-to-asset>
+"""
+import argparse
+import pathlib
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent  # /work/<slug>
+EDIT = ROOT / "edit"
+MANIFEST_PATH = ROOT / "manifest.json"
+
+
+def run(cmd):
+    print("CMD:", " ".join(map(str, cmd)), flush=True)
+    subprocess.run(cmd, check=True)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("asset", help="Path to the dropped {asset_type_pretty} file")
+    args = ap.parse_args()
+
+    src = pathlib.Path(args.asset).resolve()
+    if not src.exists():
+        sys.exit(f"asset not found: {{src}}")
+
+    # TODO: implement the merge step specific to {asset_type}.
+    # See /docs/DROPIN_SCAFFOLD_PATTERN.md for the canonical merge
+    # shape per asset type. Until this is implemented, the agent
+    # reports "merge stub" and continues with the other variants.
+    print(f"merge stub: would merge {{src}} for asset type {asset_type}")
+    print("Edit this script to implement the actual merge logic.")
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def emit_scaffold(
+    project_slug: str,
+    asset_type: str,
+    sources: list[str],
+    notes: str,
+    work_root: Path,
+    assets_root: Path,
+) -> None:
+    if asset_type not in ASSET_TYPES:
+        raise SystemExit(
+            f"unknown asset-type: {asset_type}. "
+            f"Known: {', '.join(ASSET_TYPES)}"
+        )
+    spec = ASSET_TYPES[asset_type]
+
+    work_dir = work_root / project_slug
+    if not work_dir.is_dir():
+        raise SystemExit(f"no project workspace at {work_dir}")
+
+    manifest_path = work_dir / "manifest.json"
+    manifest = (
+        json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    )
+    asset_id = manifest.get("id", project_slug)
+    asset_path = Path(manifest.get("asset_path", str(assets_root / asset_id)))
+
+    # 1. Drop folder + README
+    asset_type_dir_name = asset_type.replace("-", "_") if asset_type == "license-doc" else asset_type
+    if asset_type == "logo":
+        asset_type_dir_name = "branding"
+    if asset_type == "license-doc":
+        asset_type_dir_name = "licenses"
+    if asset_type == "client-footage":
+        asset_type_dir_name = "raw_addendum"
+
+    drop_dir = asset_path / asset_type_dir_name
+    drop_dir.mkdir(parents=True, exist_ok=True)
+
+    merge_script_filename = spec["merge_script_filename"]
+    merge_script_path = (
+        f"edit/{merge_script_filename}"
+        if merge_script_filename and not merge_script_filename.startswith("(")
+        else "(no merge script — see manifest)"
+    )
+
+    src_list = sources or spec["default_url_hints"]
+    source_list_md = "\n".join(f"     - {u}" for u in src_list)
+
+    readme = README_TEMPLATE.substitute(
+        asset_type=asset_type,
+        asset_type_pretty=asset_type.replace("-", " "),
+        drop_filename_glob=spec["drop_filename_glob"],
+        drop_dir=str(drop_dir),
+        drop_example=spec["drop_examples"][0],
+        merge_script_path=merge_script_path,
+        merges_into=", ".join(spec["merges_into"]),
+        source_list=source_list_md,
+        license_note=spec["license_note"],
+        notes=f"\n## Project notes\n\n{notes}\n" if notes else "",
+    )
+    (drop_dir / "README.md").write_text(readme)
+
+    # 2. Merge script template (only when there is one)
+    if merge_script_filename and not merge_script_filename.startswith("("):
+        merge_script_full = work_dir / "edit" / merge_script_filename
+        if not merge_script_full.exists():
+            merge_script_full.write_text(
+                MERGE_SCRIPT_TEMPLATE.format(
+                    asset_type=asset_type.replace("-", "_"),
+                    asset_type_pretty=asset_type.replace("-", " "),
+                    merge_script_path=f"edit/{merge_script_filename}",
+                )
+            )
+            merge_script_full.chmod(0o755)
+
+    # 3. Manifest update — set pending_dropin flag
+    key = asset_type.replace("-", "_")
+    manifest.setdefault(key, {})
+    manifest[key]["pending_dropin"] = True
+    manifest[key]["drop_path"] = str(drop_dir)
+    manifest[key]["scaffold_sources"] = src_list
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    print(f"drop-in scaffold for '{asset_type}' ready at {drop_dir}")
+    print(f"  merge script: {merge_script_path}")
+    print(f"  manifest flag: .{key}.pending_dropin = true")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("project_slug")
+    ap.add_argument(
+        "asset_type",
+        choices=sorted(ASSET_TYPES.keys()),
+        help="Asset class (extend ASSET_TYPES dict to add more).",
+    )
+    ap.add_argument(
+        "--sources",
+        help="Comma-separated list of candidate URLs to include in the README.",
+        default="",
+    )
+    ap.add_argument(
+        "--notes",
+        help="Free-text notes appended to the README.",
+        default="",
+    )
+    ap.add_argument("--work-root", default="/work")
+    ap.add_argument("--assets-root", default="/assets")
+    args = ap.parse_args()
+
+    sources = [s.strip() for s in args.sources.split(",") if s.strip()]
+    try:
+        emit_scaffold(
+            args.project_slug,
+            args.asset_type,
+            sources,
+            args.notes,
+            Path(args.work_root),
+            Path(args.assets_root),
+        )
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"dropin-scaffold failed: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

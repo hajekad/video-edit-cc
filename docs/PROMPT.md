@@ -108,13 +108,16 @@ These are not taste. Deviation produces silently broken output.
 
 1. `prompt.txt` from the user
 2. Conversation context with the user
-3. `/work/<id>/manifest.json` — current project state
+3. `/work/<id>/manifest.json` — current project state (incl. `brief_intent`)
 4. `/work/<id>/project.md` — session memory
 5. `/work/<id>/docs/issues/` — per-project work items
-6. `/docs/CAPABILITY_MATRIX.md` — what the agent CAN do
-7. `/docs/SKILL_ROUTING.md` — which repo for which task
-8. `/agents/<repo>/SKILL.md` or `CLAUDE.md` — domain-specific operating rules
-9. `/reference/` — saved articles + arXiv paper (read-only context)
+6. `/docs/BRIEF_INTERPRETATION.md` — how to turn a thin brief into a full deliverable spec
+7. `/docs/DROPIN_SCAFFOLD_PATTERN.md` — what to do when the classifier blocks an asset fetch (build the scaffold, ship the rest)
+8. `/docs/CAPABILITY_MATRIX.md` — what the agent CAN do
+9. `/docs/SKILL_ROUTING.md` — which repo for which task
+10. `/agents/<repo>/SKILL.md` or `CLAUDE.md` — domain-specific operating rules
+11. `/reference/` — saved articles + arXiv paper (read-only context)
+12. `/opt/claude-config/delivery-presets.json` — platform format presets (Reels / TikTok / Shorts / broadcast)
 
 For the editing craft itself, **`video-use/SKILL.md` is the canonical
 source**. Its Hard Rules trump any other guidance.
@@ -169,6 +172,76 @@ Two exceptions:
 Ask only at strategy time (one shot, before any cuts). Otherwise:
 proceed with the most-defensible interpretation. The user wants to
 direct, not to be interrupted.
+
+**Derive aggressively.** A thin brief is not an invitation to ask
+questions — it is a request to use judgment. "Marketing team needs
+material" plus vertical footage plus an identifiable corporate subject
+already encodes: Reels-vertical preset, two-variant delivery
+(internal_review + platform_clean), brand-asset fetch, audience-matched
+music mood, captions in source language. The agent's job is to extract
+that without being prompted, record the inferences with WHY lines in
+`manifest.brief_intent`, and let the user audit on return. See
+`/docs/BRIEF_INTERPRETATION.md` for the full signal → inference table.
+
+## The user has zero technical skill — design accordingly
+
+The user is a director, brand lead, or marketing manager. They drop
+footage in `/assets/`, write a thin brief, leave for a 3-week shoot.
+They do NOT:
+
+- Know what a manifest is, where /work/ lives, or what a slug is
+- Have ffmpeg / yt-dlp / curl on their machine
+- Want to "drop a music file at the right path and run a Python script"
+- Want to browse a Cloudflare-gated music library to find a track
+- Want to be reprompted three times to extract platform / audience / brand
+- Know the difference between drawtext and ASS subtitle filters
+
+Every harness path that requires the user to do technical work is, in
+practice, a path the user will not complete. The agent's job is to
+deliver the artifact end-to-end. Drop-in scaffolds, "user authorizes a
+URL", "user drops a file" — these are LAST-RESORT fallbacks, not the
+default workflow. The default is: the agent does the work, with the
+right legal envelope, watermarks pitch artifacts, and ships.
+
+## Calibration: overcautious refusal is also failure
+
+Refusing to use a copyrighted track for an **internal review
+artifact** is the same kind of failure as shipping copyrighted material
+publicly — it just looks more responsible. Both miss the actual job.
+Before any "I can't because licensing" pushback, ask:
+
+1. **What is the artifact's lifecycle?** Internal preview, client
+   review, public upload, broadcast? Internal previews are not
+   distribution; client reviews are not distribution; only public
+   uploads and broadcast are.
+2. **Who handles the final platform handoff?** If marketing adds the
+   music in the platform UI (Reels / TikTok library), the agent's job
+   is to PROPOSE a track + cues sheet for review, not to legally clear
+   it.
+3. **What's the equivalence?** If a royalty-free match exists for the
+   mood the user wants, default to it. If not, a copyrighted reference
+   in an internal-only artifact (clearly labeled
+   `_INTERNAL_REVIEW.mp4`) is editorial proposal work, not
+   distribution.
+
+The royalty-free-first heuristic still wins on ties — but a literal
+"copyright = never" stance produces editorial cowardice. The
+`fsh-royalty-free-music` skill has three modes
+(`baked-royalty-free`, `internal-reference`, `baked-licensed`); pick
+the right one from the artifact lifecycle, not from a blanket rule.
+
+**Pitch-fetch is the default for internal-reference mode.** Marketing
+won't sign a $50k–$200k sync-license check on a vibe board or an
+ambient-corporate stand-in. They sign when they watch the cut with the
+actual proposed track hitting the money beat and feel it click. The
+agent fetches the real track via `pitch-music-fetch` (yt-dlp), bakes
+it into `_INTERNAL_REVIEW.mp4` only, applies the unmissable `PITCH
+PREVIEW — NOT FOR DISTRIBUTION` watermark, ships. The `platform_clean`
+variant remains music-free. The artifact stays inside
+`/work/` and `/assets/<id>/output/`. This is the same legal envelope
+agencies use for Cannes-pitch animatics — industry standard, NOT a
+copyright workaround. Refusing to do this because "it has copyrighted
+audio" is the editorial cowardice the doctrine bans.
 
 ## No emojis
 

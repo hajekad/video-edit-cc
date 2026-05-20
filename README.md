@@ -76,39 +76,34 @@ cd video-edit-cc
 
 ### 2. Configure for your host
 
-**If you have an NVIDIA GPU (Linux only):**
+**Default state: CPU-only, runs everywhere.** No edits needed on macOS
+or any Linux without NVIDIA. Skip to step 3.
+
+**If you have an NVIDIA GPU (Linux only)** — enable GPU acceleration
+by uncommenting two blocks in `docker/docker-compose.yml`:
+
+```yaml
+    environment:
+      ...
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+Then verify the GPU is reachable from Docker:
 
 ```bash
-# Verify GPU passthrough works
 docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 # If this doesn't print your GPU, install NVIDIA Container Toolkit:
 #   sudo nvidia-ctk runtime configure --runtime=docker
 #   sudo systemctl restart docker
 ```
-
-Nothing else to change — `docker/docker-compose.yml` is set up for
-NVIDIA out of the box.
-
-**If you DON'T have an NVIDIA GPU (macOS, or Linux without NVIDIA):**
-
-Comment out two blocks in `docker/docker-compose.yml`:
-
-```yaml
-#   environment:
-#     - NVIDIA_VISIBLE_DEVICES=all
-#     - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics
-
-#   deploy:
-#     resources:
-#       reservations:
-#         devices:
-#           - driver: nvidia
-#             count: all
-#             capabilities: [gpu]
-```
-
-Keep everything else (bind mounts, volumes, restart policy). The
-container will run on CPU-only — slower but functional.
 
 ### 3. Build the image
 

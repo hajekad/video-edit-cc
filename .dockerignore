@@ -1,12 +1,14 @@
 # Build context is the FotoStudioH root (see docker-compose.yml: context: ..).
 # The Dockerfile only COPIES:
-#   - agents/system-packages.txt
-#   - docker/claude-config/
+#   - agents/system-packages.txt    (pacman/AUR manifest, read at build time)
+#   - agents/python-packages.txt    (pip manifest for /opt/ml-venv, read at build time)
+#   - docker/claude-config/         (baked into /opt/claude-config/)
 # Everything else is bind-mounted at runtime; keep it out of the build context
 # so buildkit doesn't ship 11+ GB to the daemon on every rebuild.
 
 agents/*
 !agents/system-packages.txt
+!agents/python-packages.txt
 
 reference/
 work/

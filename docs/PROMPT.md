@@ -99,7 +99,7 @@ These are not taste. Deviation produces silently broken output.
 8. Word-level verbatim ASR only. Never phrase/SRT mode. Never normalize fillers.
 9. Cache transcripts per source. Never re-transcribe unchanged input.
 10. Parallel sub-agents for multiple animations. One Agent call per slot.
-11. Strategy confirmed by user before any cut is made.
+11. Strategy PROPOSED before execution (write `docs/strategy.md`, set `manifest.strategy.approved`). The user runs this system; they don't approve cuts. Self-approve in auto-mode and proceed; user audits on return.
 12. All session outputs in `/work/<id>/edit/` or `/assets/<id>/output/`. Never inside `/agents/`.
 
 (Rules 1-11 are video-use's Hard Rules. Rule 12 is FSH-specific.)

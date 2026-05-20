@@ -57,8 +57,8 @@ take longer.
 
 ```bash
 # 1. Clone with submodules (44 third-party skill repos under agents/)
-git clone --recurse-submodules git@github.com:hajekad/FotoStudioH.git
-cd FotoStudioH
+git clone --recurse-submodules git@github.com:hajekad/video-edit-cc.git
+cd video-edit-cc
 
 # (or if you already cloned without --recurse-submodules:)
 git submodule update --init --recursive
@@ -174,8 +174,8 @@ Keep everything else identical — bind mounts, volumes, restart policy.
 ### 2. Build + run
 
 ```bash
-git clone --recurse-submodules git@github.com:hajekad/FotoStudioH.git
-cd FotoStudioH/docker
+git clone --recurse-submodules git@github.com:hajekad/video-edit-cc.git
+cd video-edit-cc/docker
 docker compose build fotostudioh-agent      # ~30-45 min on Mac (slower than Linux)
 docker compose up -d fotostudioh-agent
 ```
